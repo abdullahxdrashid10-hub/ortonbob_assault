@@ -1,150 +1,204 @@
 <?php
 /**
- * children.php - Manage Registered Children
+ * children.php - Manage Registered Children Profiles
  * 
- * Allows a parent to view all their registered children, add a new child profile,
- * navigate to a child's immunization schedule, and remove a child.
- * 
- * Task 2: Rejects deletion of any child who has associated booking records,
- * using shared_child_has_bookings($childId) in shared_queries.php.
+ * Task C: Adapts to the team's real database schema:
+ * - Columns: full_name, date_of_birth, gender (male/female/other), blood_group,
+ *   birth_weight_kg, birth_certificate_no, allergies, medical_notes, is_active.
+ * - Restricts listings strictly to active children (is_active = 1) of the logged-in parent.
+ * - "Delete" performs a SOFT DELETE (is_active = 0) to preserve historical medical integrity.
+ * - Verifies that the database AFTER INSERT trigger successfully generated child_vaccinations rows.
  */
 
 $role = 'parent';
 $title = 'My Children';
 require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/shared_queries.php';
 
 // Authentication guard
 require_parent();
 $parentId = (int)$_SESSION['parent_id'];
 
-// Handle POST actions (Add Child or Delete Child)
+// Allowed ENUM values from the official schema
+$validGenders = ['male', 'female', 'other'];
+$validBloodGroups = ['unknown', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+
+// Handle POST submissions (Add Child or Soft Delete)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
 
-    // Action 1: Delete a child profile
+    // Action 1: Soft-Delete a Child Profile
     if ($action === 'delete') {
         $childId = (int)($_POST['id'] ?? 0);
+        $deleted = shared_soft_delete_child($childId, $parentId);
 
-        // Ownership verification: ensure child belongs to the logged-in parent
-        $checkChild = db()->prepare('SELECT id, full_name FROM children WHERE id = ? AND parent_id = ?');
-        $checkChild->execute([$childId, $parentId]);
-        $targetChild = $checkChild->fetch();
-
-        if (!$targetChild) {
-            flash('error', 'Child record not found or unauthorized.');
+        if ($deleted) {
+            flash('success', 'Child profile removed from active records.');
         } else {
-            // Task 2: Guard check using shared_child_has_bookings() (SHARED TABLE: bookings)
-            if (shared_child_has_bookings($childId)) {
-                flash('error', 'This child has vaccination records and cannot be removed.');
-            } else {
-                $del = db()->prepare('DELETE FROM children WHERE id = ? AND parent_id = ?');
-                $del->execute([$childId, $parentId]);
-                flash('success', 'Child profile removed successfully.');
-            }
+            flash('error', 'Child record could not be removed or unauthorized.');
         }
-    } 
-    // Action 2: Add a new child profile
+    }
+    // Action 2: Add a New Child Profile
     else {
-        $name = trim($_POST['full_name'] ?? '');
-        $dob = trim($_POST['dob'] ?? '');
-        $gender = trim($_POST['gender'] ?? '');
-        $bloodGroup = trim($_POST['blood_group'] ?? '') ?: null;
-        $notes = trim($_POST['notes'] ?? '') ?: null;
+        $fullName   = trim($_POST['full_name'] ?? '');
+        $dob        = trim($_POST['date_of_birth'] ?? '');
+        $gender     = strtolower(trim($_POST['gender'] ?? ''));
+        $bloodGroup = trim($_POST['blood_group'] ?? 'unknown');
+        $weightRaw  = trim($_POST['birth_weight_kg'] ?? '');
+        $certNo     = trim($_POST['birth_certificate_no'] ?? '') ?: null;
+        $allergies  = trim($_POST['allergies'] ?? '') ?: null;
+        $notes      = trim($_POST['medical_notes'] ?? '') ?: null;
 
-        $isValid = ($name !== '') 
-            && in_array($gender, ['Male', 'Female', 'Other'], true)
-            && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob) 
-            && ($dob <= date('Y-m-d'));
+        $weightKg = ($weightRaw !== '' && is_numeric($weightRaw)) ? (float)$weightRaw : null;
+        $isValidDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob) && ($dob <= date('Y-m-d'));
 
-        if (!$isValid) {
-            flash('error', 'Please provide a valid child name, gender, and date of birth that is not in the future.');
+        // Input validation
+        if ($fullName === '') {
+            flash('error', 'Please enter the child\'s full name.');
+        } elseif (!$isValidDate) {
+            flash('error', 'Date of birth must be a valid date and cannot be in the future.');
+        } elseif (!in_array($gender, $validGenders, true)) {
+            flash('error', 'Please select a valid gender option.');
+        } elseif (!in_array($bloodGroup, $validBloodGroups, true)) {
+            flash('error', 'Please select a valid blood group option.');
         } else {
-            $ins = db()->prepare('INSERT INTO children (parent_id, full_name, dob, gender, blood_group, notes) VALUES (?, ?, ?, ?, ?, ?)');
-            $ins->execute([$parentId, $name, $dob, $gender, $bloodGroup, $notes]);
-            flash('success', 'Child profile added successfully!');
+            // Insert child profile
+            $childId = shared_add_child(
+                $parentId,
+                $fullName,
+                $dob,
+                $gender,
+                $bloodGroup,
+                $weightKg,
+                $certNo,
+                $allergies,
+                $notes
+            );
+
+            // Verify trigger execution: trg_children_after_insert calls sp_generate_child_schedule()
+            $scheduleCount = shared_count_child_vaccination_rows($childId);
+
+            if ($scheduleCount === 0) {
+                flash('error', 'Child was registered, but automatic vaccination schedule generation failed. Please contact system support.');
+            } else {
+                flash('success', "Child profile for " . e($fullName) . " added successfully! $scheduleCount scheduled vaccination doses generated.");
+            }
         }
     }
     redirect('parent/children.php');
 }
 
-// Fetch all registered children for this parent
-$stmt = db()->prepare('SELECT * FROM children WHERE parent_id = ? ORDER BY dob DESC');
-$stmt->execute([$parentId]);
-$kids = $stmt->fetchAll();
+// Fetch all active children belonging to this parent
+$kids = shared_get_parent_children($parentId);
 
 require __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="reveal">
   <h1>My Children</h1>
-  <p class="muted">Register and maintain your children's profiles for accurate age-based immunization scheduling.</p>
+  <p class="muted">Register child profiles to automatically calculate immunization schedules and track life-saving doses.</p>
 </div>
 
 <div class="grid2">
-  <!-- Form: Add Child -->
+  <!-- Form: Register Child -->
   <section class="card reveal">
     <h2>Add a Child Profile</h2>
     <form method="post" action="children.php" class="form">
       <?= csrf_field() ?>
+
       <label>
         Child Full Name:
-        <input type="text" name="full_name" required placeholder="e.g. Zainab Khan">
+        <input type="text" name="full_name" required placeholder="e.g. Ayaan Khan" value="<?= e($_POST['full_name'] ?? '') ?>">
       </label>
+
       <label>
         Date of Birth:
-        <input type="date" name="dob" max="<?= date('Y-m-d') ?>" required>
+        <input type="date" name="date_of_birth" max="<?= date('Y-m-d') ?>" required value="<?= e($_POST['date_of_birth'] ?? '') ?>">
       </label>
+
       <label>
         Gender:
         <select name="gender" required>
-          <option value="Male">Male</option>
-          <option value="Female">Female</option>
-          <option value="Other">Other</option>
+          <option value="male" <?= (($_POST['gender'] ?? '') === 'male') ? 'selected' : '' ?>>Male</option>
+          <option value="female" <?= (($_POST['gender'] ?? '') === 'female') ? 'selected' : '' ?>>Female</option>
+          <option value="other" <?= (($_POST['gender'] ?? '') === 'other') ? 'selected' : '' ?>>Other</option>
         </select>
       </label>
+
       <label>
-        Blood Group (Optional):
-        <input type="text" name="blood_group" maxlength="5" placeholder="e.g. B+, O-">
+        Blood Group:
+        <select name="blood_group">
+          <?php foreach ($validBloodGroups as $bg): ?>
+            <option value="<?= e($bg) ?>" <?= (($_POST['blood_group'] ?? 'unknown') === $bg) ? 'selected' : '' ?>>
+              <?= e(strtoupper($bg)) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
       </label>
+
       <label>
-        Medical Notes / Allergies (Optional):
-        <input type="text" name="notes" maxlength="255" placeholder="e.g. Penicillin allergy">
+        Birth Weight in KG (Optional):
+        <input type="number" step="0.01" min="0.5" max="15" name="birth_weight_kg" placeholder="e.g. 3.25" value="<?= e($_POST['birth_weight_kg'] ?? '') ?>">
       </label>
+
+      <label>
+        Birth Certificate / Registration No (Optional):
+        <input type="text" name="birth_certificate_no" placeholder="e.g. B-123456" value="<?= e($_POST['birth_certificate_no'] ?? '') ?>">
+      </label>
+
+      <label>
+        Allergies (Optional):
+        <input type="text" name="allergies" placeholder="e.g. None known, Penicillin" value="<?= e($_POST['allergies'] ?? '') ?>">
+      </label>
+
+      <label>
+        Medical Notes (Optional):
+        <textarea name="medical_notes" rows="2" style="padding:12px; border-radius:10px; border:1px solid var(--line); background:rgba(0,0,0,.25); color:var(--text); font-family:inherit;" placeholder="Any medical conditions or pediatrician instructions"><?= e($_POST['medical_notes'] ?? '') ?></textarea>
+      </label>
+
       <div style="margin-top:8px;">
         <button type="submit" class="btn">Register Child</button>
       </div>
     </form>
   </section>
 
-  <!-- List: Registered Children -->
+  <!-- List: Active Registered Children -->
   <section class="card reveal">
     <h2>Registered Profiles</h2>
     <?php if (empty($kids)): ?>
-      <p class="muted">No children registered under this account yet. Add a profile using the form.</p>
+      <p class="muted">No active children registered under this account yet. Use the form to add your child.</p>
     <?php else: ?>
       <?php foreach ($kids as $k): ?>
         <div class="row">
           <div>
             <b><?= e($k['full_name']) ?></b><br>
             <span class="muted">
-              <?= e($k['gender']) ?> &middot; 
-              <?= e(age_text($k['dob'])) ?> &middot; 
-              DOB: <?= e($k['dob']) ?>
-              <?php if (!empty($k['blood_group'])): ?>
+              <?= e(ucfirst($k['gender'])) ?> &middot; 
+              <?= e(age_text($k['date_of_birth'])) ?> &middot; 
+              DOB: <?= e($k['date_of_birth']) ?>
+              <?php if ($k['blood_group'] !== 'unknown'): ?>
                 &middot; <?= e($k['blood_group']) ?>
               <?php endif; ?>
+              <?php if (!empty($k['birth_weight_kg'])): ?>
+                &middot; <?= e($k['birth_weight_kg']) ?> kg
+              <?php endif; ?>
             </span>
+            <?php if (!empty($k['allergies'])): ?>
+              <div class="muted" style="font-size:0.8rem; color:var(--warn); margin-top:2px;">
+                Allergies: <?= e($k['allergies']) ?>
+              </div>
+            <?php endif; ?>
           </div>
           <div class="actions">
-            <a class="btn btn-sm btn-ghost" href="schedule.php?child_id=<?= (int)$k['id'] ?>">Schedule</a>
-            <a class="btn btn-sm" href="child_edit.php?id=<?= (int)$k['id'] ?>">Edit</a>
-            <!-- Task 2: Delete form protected with CSRF and server-side booking guard -->
-            <form method="post" action="children.php" onsubmit="return confirm('Are you sure you want to delete this child profile?');">
+            <a class="btn btn-sm btn-ghost" href="schedule.php?child_id=<?= (int)$k['child_id'] ?>">Schedule</a>
+            <a class="btn btn-sm" href="child_edit.php?id=<?= (int)$k['child_id'] ?>">Edit</a>
+            <!-- Soft Delete form: sets is_active = 0 -->
+            <form method="post" action="children.php" onsubmit="return confirm('Remove this child profile from active records? Historical vaccinations will be retained.');">
               <?= csrf_field() ?>
               <input type="hidden" name="action" value="delete">
-              <input type="hidden" name="id" value="<?= (int)$k['id'] ?>">
+              <input type="hidden" name="id" value="<?= (int)$k['child_id'] ?>">
               <button type="submit" class="btn btn-sm btn-danger">Delete</button>
             </form>
           </div>

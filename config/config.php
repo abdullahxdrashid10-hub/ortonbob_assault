@@ -1,7 +1,7 @@
 <?php
 /**
- * config.php - global configuration, DB connection (PDO) and helper functions.
- * Included at the top of every page.
+ * config.php - Global configuration, database connection (PDO) and helper functions.
+ * Adapts to the team's official vaccination_db schema.
  */
 
 // ---- Database settings (XAMPP defaults) ----
@@ -10,8 +10,8 @@ const DB_NAME = 'vaccination_db';
 const DB_USER = 'root';
 const DB_PASS = '';
 
-// Task 3: Compute base URL dynamically from project root relative to document root.
-// Encodes segments so URLs have no raw unescaped spaces. Adapts if folder is renamed or moved.
+// Compute base URL dynamically from project root relative to document root.
+// Encodes segments so URLs have no raw unescaped spaces.
 $docRoot = isset($_SERVER['DOCUMENT_ROOT']) ? str_replace('\\', '/', realpath($_SERVER['DOCUMENT_ROOT'])) : '';
 $projDir = str_replace('\\', '/', realpath(dirname(__DIR__)));
 $computedBase = '';
@@ -24,14 +24,23 @@ if (!defined('BASE_URL')) {
     define('BASE_URL', $computedBase);
 }
 
-// Booking status values - MUST match the admin panel.
-const ST_PENDING = 'Pending';
-const ST_APPROVED = 'Approved';
-const ST_REJECTED = 'Rejected';
-const ST_VACCINATED = 'Vaccinated';
-const ST_NOT_VACCINATED = 'Not Vaccinated';
+// ---- Real Database Status Constants ----
 
-// Task 8: Set secure session cookie flags before session_start()
+// Appointments status values (enum: pending, approved, rejected, completed, cancelled)
+const APT_PENDING   = 'pending';
+const APT_APPROVED  = 'approved';
+const APT_REJECTED  = 'rejected';
+const APT_COMPLETED = 'completed';
+const APT_CANCELLED = 'cancelled';
+
+// Child vaccinations status values (enum: upcoming, requested, booked, completed, missed)
+const CV_UPCOMING  = 'upcoming';
+const CV_REQUESTED = 'requested';
+const CV_BOOKED    = 'booked';
+const CV_COMPLETED = 'completed';
+const CV_MISSED    = 'missed';
+
+// Set secure session cookie flags before session_start()
 if (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([
         'lifetime' => 0,
@@ -60,7 +69,7 @@ function db(): PDO
                 ]
             );
         } catch (PDOException $e) {
-            die('Database connection failed. Is MySQL running and sql/schema.sql imported?');
+            die('Database connection failed. Is MySQL running and sql/official_schema.sql imported?');
         }
     }
     return $pdo;
@@ -103,22 +112,6 @@ function csrf_check(): void
     }
 }
 
-/** Guard: only a logged-in parent may continue. */
-function require_parent(): void
-{
-    if (empty($_SESSION['parent_id'])) {
-        redirect('parent/login.php');
-    }
-}
-
-/** Guard: only a logged-in hospital may continue. */
-function require_hospital(): void
-{
-    if (empty($_SESSION['hospital_id'])) {
-        redirect('hospital/login.php');
-    }
-}
-
 /** Human-readable age of a child from date of birth. */
 function age_text(string $dob): string
 {
@@ -128,19 +121,23 @@ function age_text(string $dob): string
     return $d->d . ' days';
 }
 
-/** CSS class for a status badge. */
+/** CSS class for a status badge adapting to the team's real lowercase schema values. */
 function badge(string $status): string
 {
     $map = [
-        ST_PENDING => 'b-pending', 
-        ST_APPROVED => 'b-approved', 
-        ST_REJECTED => 'b-rejected',
-        ST_VACCINATED => 'b-done', 
-        ST_NOT_VACCINATED => 'b-missed',
-        'Taken' => 'b-done',
-        'Booked' => 'b-approved',
-        'Overdue' => 'b-rejected',
-        'Upcoming' => 'b-pending',
+        // child_vaccinations values
+        CV_UPCOMING  => 'b-pending',
+        CV_REQUESTED => 'b-pending',
+        CV_BOOKED    => 'b-approved',
+        CV_COMPLETED => 'b-done',
+        CV_MISSED    => 'b-missed',
+        // appointments values
+        APT_PENDING   => 'b-pending',
+        APT_APPROVED  => 'b-approved',
+        APT_REJECTED  => 'b-rejected',
+        APT_COMPLETED => 'b-done',
+        APT_CANCELLED => 'b-rejected',
     ];
-    return '<span class="badge ' . ($map[$status] ?? '') . '">' . e($status) . '</span>';
+    $cls = $map[strtolower(trim($status))] ?? 'b-pending';
+    return '<span class="badge ' . $cls . '">' . e(ucfirst($status)) . '</span>';
 }

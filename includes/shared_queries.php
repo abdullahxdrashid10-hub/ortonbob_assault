@@ -1,473 +1,418 @@
 <?php
 /**
- * shared_queries.php - Centralized repository for all queries touching
- * admin-owned SHARED TABLES (hospitals, vaccines, bookings).
+ * shared_queries.php - Central Query Repository for Real Vaccination Management Schema
  * 
- * Rules:
- * - Every function here operates on or joins one of the shared tables.
- * - Every query block is commented with "SHARED TABLE".
- * - When the admin team shares their finalized database schema, update
- *   column names and table structures HERE without altering individual page files.
+ * Interacts directly with the team's official database:
+ * - users, parents, children, child_vaccinations, vaccines, vaccine_schedule, notifications
+ * 
+ * Every function is documented with the exact tables it touches and enforces
+ * parent ownership and active-state checks server-side.
  */
 
 require_once __DIR__ . '/../config/config.php';
 
 /**
- * SHARED TABLE: hospitals
- * Fetch all hospitals matching a search term (name, location, or address).
+ * Touches: children
+ * Fetch all active children belonging to the specified parent.
  * 
- * @param string $search
+ * @param int $parentId
  * @return array
  */
-function shared_search_hospitals(string $search = ''): array
+function shared_get_parent_children(int $parentId): array
 {
-    // SHARED TABLE: hospitals
-    $sql = "SELECT id, name, address, location, phone 
-            FROM hospitals 
-            WHERE name LIKE :kw OR location LIKE :kw OR address LIKE :kw 
-            ORDER BY name ASC";
+    // Touches: children
+    $sql = "SELECT child_id, parent_id, full_name, date_of_birth, gender,
+                   blood_group, birth_weight_kg, birth_certificate_no,
+                   allergies, medical_notes, is_active, created_at
+            FROM children
+            WHERE parent_id = ? AND is_active = 1
+            ORDER BY date_of_birth DESC, child_id DESC";
     $stmt = db()->prepare($sql);
-    $stmt->execute([':kw' => '%' . $search . '%']);
+    $stmt->execute([$parentId]);
     return $stmt->fetchAll();
 }
 
 /**
- * SHARED TABLE: hospitals
- * Fetch a single hospital record by its primary key ID.
- * 
- * @param int $hospitalId
- * @return array|null
- */
-function shared_get_hospital_by_id(int $hospitalId): ?array
-{
-    // SHARED TABLE: hospitals
-    $stmt = db()->prepare("SELECT id, name, address, location, phone FROM hospitals WHERE id = ?");
-    $stmt->execute([$hospitalId]);
-    $res = $stmt->fetch();
-    return $res ?: null;
-}
-
-/**
- * SHARED TABLE: vaccines
- * Fetch all vaccines currently marked as available in the inventory.
- * 
- * @return array
- */
-function shared_get_available_vaccines(): array
-{
-    // SHARED TABLE: vaccines
-    $stmt = db()->query("SELECT id, name, available FROM vaccines WHERE available = 1 ORDER BY name ASC");
-    return $stmt->fetchAll();
-}
-
-/**
- * SHARED TABLE: vaccines
- * Fetch a single vaccine record by ID.
- * 
- * @param int $vaccineId
- * @return array|null
- */
-function shared_get_vaccine_by_id(int $vaccineId): ?array
-{
-    // SHARED TABLE: vaccines
-    $stmt = db()->prepare("SELECT id, name, available FROM vaccines WHERE id = ?");
-    $stmt->execute([$vaccineId]);
-    $res = $stmt->fetch();
-    return $res ?: null;
-}
-
-/**
- * SHARED TABLE: vaccines, bookings
- * Get available vaccines for a specific child that can be booked:
- * - Must exist in vaccine_schedule
- * - Must be available (available = 1 in vaccines)
- * - Must NOT already have an active/completed booking ('Pending', 'Approved', 'Vaccinated')
+ * Touches: children
+ * Fetch a single active child, verifying that it belongs to the authenticated parent.
  * 
  * @param int $childId
- * @return array
+ * @param int $parentId
+ * @return array|null
  */
-function shared_get_bookable_vaccines_for_child(int $childId): array
+function shared_get_parent_child_by_id(int $childId, int $parentId): ?array
 {
-    // SHARED TABLE: vaccines, bookings
-    $sql = "SELECT v.id, v.name, s.due_after_days, s.description
-            FROM vaccines v
-            JOIN vaccine_schedule s ON (s.vaccine_id = v.id OR s.vaccine_name = v.name)
-            WHERE v.available = 1
-              AND NOT EXISTS (
-                  SELECT 1 FROM bookings b 
-                  WHERE b.child_id = :child_id 
-                    AND b.vaccine_id = v.id 
-                    AND b.status IN ('Pending', 'Approved', 'Vaccinated')
-              )
-            ORDER BY s.due_after_days ASC, v.name ASC";
-    $stmt = db()->prepare($sql);
-    $stmt->execute([':child_id' => $childId]);
-    return $stmt->fetchAll();
-}
-
-/**
- * SHARED TABLE: bookings
- * Check if a booking already exists for a child and vaccine that is active or completed.
- * Statuses: 'Pending', 'Approved', 'Vaccinated'
- * 
- * @param int $childId
- * @param int $vaccineId
- * @return bool
- */
-function shared_has_active_or_completed_booking(int $childId, int $vaccineId): bool
-{
-    // SHARED TABLE: bookings
-    $sql = "SELECT id FROM bookings 
-            WHERE child_id = ? AND vaccine_id = ? AND status IN ('Pending', 'Approved', 'Vaccinated')
+    // Touches: children
+    $sql = "SELECT child_id, parent_id, full_name, date_of_birth, gender,
+                   blood_group, birth_weight_kg, birth_certificate_no,
+                   allergies, medical_notes, is_active, created_at
+            FROM children
+            WHERE child_id = ? AND parent_id = ? AND is_active = 1
             LIMIT 1";
     $stmt = db()->prepare($sql);
-    $stmt->execute([$childId, $vaccineId]);
-    return (bool)$stmt->fetch();
+    $stmt->execute([$childId, $parentId]);
+    $child = $stmt->fetch();
+    return $child ?: null;
 }
 
 /**
- * SHARED TABLE: bookings
- * Task 2: Check if a child has ANY booking records (regardless of status).
- * Used to guard against child deletion when historical records exist.
+ * Touches: children, child_vaccinations (via trigger trg_children_after_insert)
+ * Add a new child record. The database AFTER INSERT trigger automatically
+ * calls sp_generate_child_schedule() to populate child_vaccinations rows.
  * 
- * @param int $childId
- * @return bool
+ * @param int $parentId
+ * @param string $fullName
+ * @param string $dob (YYYY-MM-DD)
+ * @param string $gender ('male' | 'female' | 'other')
+ * @param string $bloodGroup ('A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-' | 'unknown')
+ * @param float|null $weightKg
+ * @param string|null $certNo
+ * @param string|null $allergies
+ * @param string|null $medicalNotes
+ * @return int Inserted child_id
  */
-function shared_child_has_bookings(int $childId): bool
-{
-    // SHARED TABLE: bookings
-    $stmt = db()->prepare("SELECT 1 FROM bookings WHERE child_id = ? LIMIT 1");
-    $stmt->execute([$childId]);
-    return (bool)$stmt->fetch();
-}
+function shared_add_child(
+    int $parentId,
+    string $fullName,
+    string $dob,
+    string $gender,
+    string $bloodGroup,
+    ?float $weightKg = null,
+    ?string $certNo = null,
+    ?string $allergies = null,
+    ?string $medicalNotes = null
+): int {
+    // Touches: children
+    $sql = "INSERT INTO children (
+                parent_id, full_name, date_of_birth, gender, blood_group,
+                birth_weight_kg, birth_certificate_no, allergies, medical_notes, is_active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)";
 
-/**
- * SHARED TABLE: bookings
- * Create a new vaccination booking with initial status 'Pending'.
- * 
- * @param int $childId
- * @param int $vaccineId
- * @param int $hospitalId
- * @param string $bookingDate (YYYY-MM-DD)
- * @param string|null $bookingTime (HH:MM:SS)
- * @return int Inserted booking ID
- */
-function shared_create_booking(int $childId, int $vaccineId, int $hospitalId, string $bookingDate, ?string $bookingTime = null): int
-{
-    // SHARED TABLE: bookings
-    $sql = "INSERT INTO bookings (child_id, vaccine_id, hospital_id, booking_date, booking_time, status)
-            VALUES (?, ?, ?, ?, ?, 'Pending')";
     $stmt = db()->prepare($sql);
-    $stmt->execute([$childId, $vaccineId, $hospitalId, $bookingDate, $bookingTime]);
+    $stmt->execute([
+        $parentId,
+        $fullName,
+        $dob,
+        $gender,
+        $bloodGroup,
+        $weightKg,
+        $certNo,
+        $allergies,
+        $medicalNotes
+    ]);
+
     return (int)db()->lastInsertId();
 }
 
 /**
- * SHARED TABLE: bookings, vaccines, hospitals
- * Fetch all bookings belonging to any child of a given parent.
- * Includes child name, vaccine name, and hospital name.
- * 
- * @param int $parentId
- * @return array
- */
-function shared_get_parent_bookings(int $parentId): array
-{
-    // SHARED TABLE: bookings, vaccines, hospitals
-    $sql = "SELECT b.id, b.child_id, b.vaccine_id, b.hospital_id, b.booking_date, b.booking_time, 
-                   b.status, b.vaccinated_on, b.created_at,
-                   c.full_name AS child_name,
-                   v.name AS vaccine_name,
-                   h.name AS hospital_name, h.location AS hospital_location
-            FROM bookings b
-            JOIN children c ON c.id = b.child_id
-            JOIN vaccines v ON v.id = b.vaccine_id
-            JOIN hospitals h ON h.id = b.hospital_id
-            WHERE c.parent_id = ?
-            ORDER BY b.booking_date DESC, b.id DESC";
-    $stmt = db()->prepare($sql);
-    $stmt->execute([$parentId]);
-    return $stmt->fetchAll();
-}
-
-/**
- * SHARED TABLE: bookings
- * Aggregate booking counts by status for dashboard statistics.
- * 
- * @param int $parentId
- * @return array [status => count]
- */
-function shared_get_parent_booking_counts(int $parentId): array
-{
-    // SHARED TABLE: bookings
-    $sql = "SELECT b.status, COUNT(*) AS count_num
-            FROM bookings b
-            JOIN children c ON c.id = b.child_id
-            WHERE c.parent_id = ?
-            GROUP BY b.status";
-    $stmt = db()->prepare($sql);
-    $stmt->execute([$parentId]);
-    return array_column($stmt->fetchAll(), 'count_num', 'status');
-}
-
-/**
- * SHARED TABLE: bookings, vaccines
- * For a single child, compute the status of every vaccine in vaccine_schedule.
- * Status rules:
- * - 'Taken': A booking with status 'Vaccinated' exists for this child & vaccine
- * - 'Booked': A booking with status 'Pending' or 'Approved' exists
- * - 'Overdue': Due date < CURDATE() and no Taken/Booked record
- * - 'Upcoming': Due date >= CURDATE() and no Taken/Booked record
+ * Touches: child_vaccinations
+ * Count the generated vaccination schedule doses for a child.
+ * Used after insert to verify the trigger generated schedule rows.
  * 
  * @param int $childId
- * @param string $childDob (YYYY-MM-DD)
- * @return array Array of schedule items with calculated status and due date
+ * @return int
  */
-function shared_get_child_schedule_status(int $childId, string $childDob): array
+function shared_count_child_vaccination_rows(int $childId): int
 {
-    // SHARED TABLE: vaccines, bookings
-    $sql = "SELECT s.id AS schedule_id, s.vaccine_name, s.due_after_days, s.description,
-                   COALESCE(s.vaccine_id, v.id) AS vaccine_id,
-                   DATE_ADD(:dob, INTERVAL s.due_after_days DAY) AS due_date,
-                   latest_b.status AS booking_status,
-                   latest_b.booking_date,
-                   latest_b.booking_time,
-                   latest_b.vaccinated_on
-            FROM vaccine_schedule s
-            LEFT JOIN vaccines v ON v.name = s.vaccine_name
-            LEFT JOIN (
-                SELECT b1.child_id, b1.vaccine_id, b1.status, b1.booking_date, b1.booking_time, b1.vaccinated_on
-                FROM bookings b1
-                WHERE b1.child_id = :child_id
-                  AND b1.id = (
-                      SELECT MAX(b2.id) 
-                      FROM bookings b2 
-                      WHERE b2.child_id = b1.child_id 
-                        AND b2.vaccine_id = b1.vaccine_id
-                  )
-            ) latest_b ON latest_b.vaccine_id = COALESCE(s.vaccine_id, v.id)
-            ORDER BY s.due_after_days ASC, s.id ASC";
-            
-    $stmt = db()->prepare($sql);
-    $stmt->execute([':dob' => $childDob, ':child_id' => $childId]);
-    $rows = $stmt->fetchAll();
-
-    $today = date('Y-m-d');
-    foreach ($rows as &$row) {
-        $bStatus = $row['booking_status'];
-        if ($bStatus === 'Vaccinated') {
-            $row['computed_status'] = 'Taken';
-        } elseif ($bStatus === 'Pending' || $bStatus === 'Approved') {
-            $row['computed_status'] = 'Booked';
-        } elseif ($row['due_date'] < $today) {
-            $row['computed_status'] = 'Overdue';
-        } else {
-            $row['computed_status'] = 'Upcoming';
-        }
-    }
-    unset($row);
-
-    return $rows;
+    // Touches: child_vaccinations
+    $stmt = db()->prepare("SELECT COUNT(*) FROM child_vaccinations WHERE child_id = ?");
+    $stmt->execute([$childId]);
+    return (int)$stmt->fetchColumn();
 }
 
 /**
- * SHARED TABLE: bookings, vaccines
- * Retrieve all upcoming vaccinations (due in <= 30 days) and overdue vaccinations
- * for ALL children belonging to a parent, excluding vaccines that are already
- * 'Vaccinated', 'Pending', or 'Approved'.
+ * Touches: children
+ * Update an existing active child's profile details with parent ownership enforcement.
  * 
+ * @param int $childId
  * @param int $parentId
- * @return array
+ * @param string $fullName
+ * @param string $dob
+ * @param string $gender
+ * @param string $bloodGroup
+ * @param float|null $weightKg
+ * @param string|null $certNo
+ * @param string|null $allergies
+ * @param string|null $medicalNotes
+ * @return bool
  */
-function shared_get_upcoming_and_overdue_vaccines_all_children(int $parentId): array
-{
-    // SHARED TABLE: vaccines, bookings
-    $sql = "SELECT c.id AS child_id, c.full_name AS child_name, c.dob AS child_dob,
-                   s.vaccine_name, s.due_after_days, s.description,
-                   COALESCE(s.vaccine_id, v.id) AS vaccine_id,
-                   DATE_ADD(c.dob, INTERVAL s.due_after_days DAY) AS due_date,
-                   DATEDIFF(DATE_ADD(c.dob, INTERVAL s.due_after_days DAY), CURDATE()) AS days_left
-            FROM children c
-            CROSS JOIN vaccine_schedule s
-            LEFT JOIN vaccines v ON v.name = s.vaccine_name
-            WHERE c.parent_id = :parent_id
-              AND DATE_ADD(c.dob, INTERVAL s.due_after_days DAY) <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-              AND NOT EXISTS (
-                  SELECT 1 FROM bookings b
-                  WHERE b.child_id = c.id
-                    AND b.vaccine_id = COALESCE(s.vaccine_id, v.id)
-                    AND b.status IN ('Vaccinated', 'Pending', 'Approved')
-              )
-            ORDER BY c.full_name ASC, due_date ASC";
-
-    $stmt = db()->prepare($sql);
-    $stmt->execute([':parent_id' => $parentId]);
-    return $stmt->fetchAll();
-}
-
-/**
- * SHARED TABLE: bookings, vaccines, hospitals
- * Fetch vaccination records with status = 'Vaccinated' for vaccination report.
- * Optionally filtered by a specific child.
- * 
- * @param int $parentId
- * @param int $childId (0 for all children)
- * @return array
- */
-function shared_get_vaccination_report(int $parentId, int $childId = 0): array
-{
-    // SHARED TABLE: bookings, vaccines, hospitals
-    $sql = "SELECT b.id, b.booking_date, b.booking_time, b.vaccinated_on,
-                   c.id AS child_id, c.full_name AS child_name, c.dob AS child_dob, c.gender,
-                   v.name AS vaccine_name,
-                   h.name AS hospital_name, h.location AS hospital_location, h.address AS hospital_address
-            FROM bookings b
-            JOIN children c ON c.id = b.child_id
-            JOIN vaccines v ON v.id = b.vaccine_id
-            JOIN hospitals h ON h.id = b.hospital_id
-            WHERE c.parent_id = :parent_id
-              AND b.status = 'Vaccinated'";
-
-    if ($childId > 0) {
-        $sql .= " AND c.id = :child_id";
-    }
-
-    $sql .= " ORDER BY COALESCE(b.vaccinated_on, b.booking_date) DESC, b.id DESC";
-
-    $stmt = db()->prepare($sql);
-    $params = [':parent_id' => $parentId];
-    if ($childId > 0) {
-        $params[':child_id'] = $childId;
-    }
-    $stmt->execute($params);
-    return $stmt->fetchAll();
-}
-
-/**
- * SHARED TABLE: bookings
- * Tasks 1 & 5: Update booking status by hospital staff.
- * - If status is 'Vaccinated', sets status and vaccinated_on = NOW().
- * - If status is 'Not Vaccinated', sets status and vaccinated_on = NULL.
- * - WHERE clause strictly enforces: hospital owns booking AND current status is 'Approved'.
- * 
- * @param int $bookingId
- * @param int $hospitalId
- * @param string $newStatus ('Vaccinated' | 'Not Vaccinated')
- * @return bool True if a row was updated, false otherwise.
- */
-function shared_hospital_update_booking_status(int $bookingId, int $hospitalId, string $newStatus): bool
-{
-    // SHARED TABLE: bookings
-    if ($newStatus === ST_VACCINATED) {
-        $sql = "UPDATE bookings 
-                SET status = :status, vaccinated_on = NOW() 
-                WHERE id = :id AND hospital_id = :hid AND status = 'Approved'";
-    } else {
-        $sql = "UPDATE bookings 
-                SET status = :status, vaccinated_on = NULL 
-                WHERE id = :id AND hospital_id = :hid AND status = 'Approved'";
-    }
+function shared_update_child(
+    int $childId,
+    int $parentId,
+    string $fullName,
+    string $dob,
+    string $gender,
+    string $bloodGroup,
+    ?float $weightKg = null,
+    ?string $certNo = null,
+    ?string $allergies = null,
+    ?string $medicalNotes = null
+): bool {
+    // Touches: children
+    $sql = "UPDATE children
+            SET full_name = ?, date_of_birth = ?, gender = ?, blood_group = ?,
+                birth_weight_kg = ?, birth_certificate_no = ?, allergies = ?, medical_notes = ?
+            WHERE child_id = ? AND parent_id = ? AND is_active = 1";
 
     $stmt = db()->prepare($sql);
     $stmt->execute([
-        ':status' => $newStatus,
-        ':id'     => $bookingId,
-        ':hid'    => $hospitalId
+        $fullName,
+        $dob,
+        $gender,
+        $bloodGroup,
+        $weightKg,
+        $certNo,
+        $allergies,
+        $medicalNotes,
+        $childId,
+        $parentId
     ]);
+
     return $stmt->rowCount() > 0;
 }
 
 /**
- * SHARED TABLE: bookings, children, parents, vaccines
- * Task 5: Fetch appointments belonging to a specific hospital filtered by status.
+ * Touches: children
+ * Soft-delete a child record by setting is_active = 0.
+ * Mandatory rule: NEVER hard delete children as that cascades and erases records.
  * 
- * @param int $hospitalId
- * @param string $statusFilter ('Approved' | 'Vaccinated' | 'Not Vaccinated')
+ * @param int $childId
+ * @param int $parentId
+ * @return bool
+ */
+function shared_soft_delete_child(int $childId, int $parentId): bool
+{
+    // Touches: children
+    $sql = "UPDATE children SET is_active = 0 WHERE child_id = ? AND parent_id = ? AND is_active = 1";
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$childId, $parentId]);
+    return $stmt->rowCount() > 0;
+}
+
+/**
+ * Touches: child_vaccinations, vaccines, children
+ * Retrieve the full immunization schedule for a specific active child of this parent.
+ * Joins child_vaccinations with vaccines for comprehensive dose details.
+ * 
+ * @param int $childId
+ * @param int $parentId
  * @return array
  */
-function shared_get_hospital_appointments(int $hospitalId, string $statusFilter): array
+function shared_get_child_vaccination_schedule(int $childId, int $parentId): array
 {
-    // SHARED TABLE: bookings, vaccines
-    $sql = "SELECT b.id, b.booking_date, b.booking_time, b.status, b.vaccinated_on,
-                   c.full_name AS child, c.dob, c.gender,
-                   v.name AS vaccine,
-                   p.full_name AS parent, p.phone
-            FROM bookings b
-            JOIN children c ON c.id = b.child_id
-            JOIN parents p ON p.id = c.parent_id
-            JOIN vaccines v ON v.id = b.vaccine_id
-            WHERE b.hospital_id = ? AND b.status = ?
-            ORDER BY b.booking_date ASC, b.booking_time ASC, b.id ASC";
+    // Touches: child_vaccinations, vaccines, children
+    $sql = "SELECT cv.child_vaccination_id, cv.child_id, cv.vaccine_id, cv.dose_number,
+                   cv.due_date, cv.status, cv.completed_date,
+                   v.vaccine_name, v.short_code, v.disease_prevented, v.route, v.description
+            FROM child_vaccinations cv
+            JOIN vaccines v ON v.vaccine_id = cv.vaccine_id
+            JOIN children c ON c.child_id = cv.child_id
+            WHERE cv.child_id = ? AND c.parent_id = ? AND c.is_active = 1
+            ORDER BY cv.due_date ASC, cv.dose_number ASC, cv.child_vaccination_id ASC";
 
     $stmt = db()->prepare($sql);
-    $stmt->execute([$hospitalId, $statusFilter]);
+    $stmt->execute([$childId, $parentId]);
     return $stmt->fetchAll();
 }
 
 /**
- * SHARED TABLE: hospitals
- * Task 5: Fetch hospital user credentials and hospital display name for login.
+ * Touches: children, child_vaccinations
+ * Summary KPI counts for the parent dashboard cards:
+ * 1. Active children count
+ * 2. Doses due within 30 days or missed/overdue
+ * 3. Doses currently requested or booked
+ * 4. Doses completed
  * 
- * @param string $email
+ * @param int $parentId
+ * @return array
+ */
+function shared_get_parent_dashboard_counts(int $parentId): array
+{
+    $pdo = db();
+
+    // 1. Active children
+    $stmtKids = $pdo->prepare("SELECT COUNT(*) FROM children WHERE parent_id = ? AND is_active = 1");
+    $stmtKids->execute([$parentId]);
+    $activeKids = (int)$stmtKids->fetchColumn();
+
+    // 2. Doses due (upcoming within 30 days) or missed (overdue)
+    $stmtDue = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM child_vaccinations cv
+        JOIN children c ON c.child_id = cv.child_id
+        WHERE c.parent_id = ? AND c.is_active = 1
+          AND cv.status IN ('upcoming', 'missed')
+          AND cv.due_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+    ");
+    $stmtDue->execute([$parentId]);
+    $dueCount = (int)$stmtDue->fetchColumn();
+
+    // 3. Doses booked or requested
+    $stmtBooked = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM child_vaccinations cv
+        JOIN children c ON c.child_id = cv.child_id
+        WHERE c.parent_id = ? AND c.is_active = 1
+          AND cv.status IN ('requested', 'booked')
+    ");
+    $stmtBooked->execute([$parentId]);
+    $bookedCount = (int)$stmtBooked->fetchColumn();
+
+    // 4. Doses completed
+    $stmtCompleted = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM child_vaccinations cv
+        JOIN children c ON c.child_id = cv.child_id
+        WHERE c.parent_id = ? AND c.is_active = 1
+          AND cv.status = 'completed'
+    ");
+    $stmtCompleted->execute([$parentId]);
+    $completedCount = (int)$stmtCompleted->fetchColumn();
+
+    return [
+        'active_children' => $activeKids,
+        'due_or_missed'   => $dueCount,
+        'active_bookings' => $bookedCount,
+        'completed_doses' => $completedCount
+    ];
+}
+
+/**
+ * Touches: child_vaccinations, children, vaccines
+ * Retrieve all child_vaccinations with status in ('upcoming', 'missed')
+ * and due_date <= today + 30 days, across all active children of the parent.
+ * 
+ * @param int $parentId
+ * @return array
+ */
+function shared_get_upcoming_doses_for_parent(int $parentId): array
+{
+    // Touches: child_vaccinations, children, vaccines
+    $sql = "SELECT cv.child_vaccination_id, cv.child_id, cv.vaccine_id, cv.dose_number,
+                   cv.due_date, cv.status,
+                   c.full_name AS child_name, c.date_of_birth, c.gender,
+                   v.vaccine_name, v.short_code, v.disease_prevented,
+                   DATEDIFF(cv.due_date, CURDATE()) AS days_remaining
+            FROM child_vaccinations cv
+            JOIN children c ON c.child_id = cv.child_id
+            JOIN vaccines v ON v.vaccine_id = cv.vaccine_id
+            WHERE c.parent_id = ? AND c.is_active = 1
+              AND cv.status IN ('upcoming', 'missed')
+              AND cv.due_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+            ORDER BY c.full_name ASC, cv.due_date ASC, cv.dose_number ASC";
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$parentId]);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Touches: notifications
+ * Fetch the latest notifications for the authenticated user account.
+ * 
+ * @param int $userId
+ * @param int $limit
+ * @return array
+ */
+function shared_get_parent_notifications(int $userId, int $limit = 5): array
+{
+    // Touches: notifications
+    $sql = "SELECT notification_id, user_id, title, message, type,
+                   related_appointment_id, is_read, created_at
+            FROM notifications
+            WHERE user_id = ?
+            ORDER BY created_at DESC, notification_id DESC
+            LIMIT " . (int)$limit;
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$userId]);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Touches: notifications
+ * Mark a specific notification as read, enforcing user ownership.
+ * 
+ * @param int $notificationId
+ * @param int $userId
+ * @return bool
+ */
+function shared_mark_notification_read(int $notificationId, int $userId): bool
+{
+    // Touches: notifications
+    $sql = "UPDATE notifications SET is_read = 1 WHERE notification_id = ? AND user_id = ?";
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$notificationId, $userId]);
+    return $stmt->rowCount() > 0;
+}
+
+/**
+ * Touches: parents, users
+ * Fetch profile details for the logged-in parent joining users table for email and timestamps.
+ * 
+ * @param int $parentId
  * @return array|null
  */
-function shared_get_hospital_user_by_email(string $email): ?array
+function shared_get_parent_profile(int $parentId): ?array
 {
-    // SHARED TABLE: hospitals
-    $sql = "SELECT u.id, u.hospital_id, u.email, u.password_hash, h.name 
-            FROM hospital_users u 
-            JOIN hospitals h ON h.id = u.hospital_id 
-            WHERE u.email = ?";
+    // Touches: parents, users
+    $sql = "SELECT p.parent_id, p.user_id, p.full_name, p.cnic, p.phone,
+                   p.address, p.city, p.created_at AS parent_created_at,
+                   u.email, u.password_hash, u.created_at AS user_created_at
+            FROM parents p
+            JOIN users u ON u.user_id = p.user_id
+            WHERE p.parent_id = ?
+            LIMIT 1";
+
     $stmt = db()->prepare($sql);
-    $stmt->execute([$email]);
+    $stmt->execute([$parentId]);
     $res = $stmt->fetch();
     return $res ?: null;
 }
 
 /**
- * SHARED TABLE: hospitals
- * Task 5: Check if hospital login email is already registered.
+ * Touches: parents
+ * Update parent profile contact information.
  * 
- * @param string $email
+ * @param int $parentId
+ * @param string $fullName
+ * @param string $phone
+ * @param string|null $address
+ * @param string|null $city
+ * @param string|null $cnic
  * @return bool
  */
-function shared_hospital_email_exists(string $email): bool
-{
-    $stmt = db()->prepare("SELECT id FROM hospital_users WHERE email = ?");
-    $stmt->execute([$email]);
-    return (bool)$stmt->fetch();
+function shared_update_parent_profile(
+    int $parentId,
+    string $fullName,
+    string $phone,
+    ?string $address = null,
+    ?string $city = null,
+    ?string $cnic = null
+): bool {
+    // Touches: parents
+    $sql = "UPDATE parents
+            SET full_name = ?, phone = ?, address = ?, city = ?, cnic = ?
+            WHERE parent_id = ?";
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$fullName, $phone, $address, $city, $cnic, $parentId]);
+    return $stmt->rowCount() > 0;
 }
 
 /**
- * SHARED TABLE: hospitals
- * Task 5: Register a new hospital and create its associated login credentials
- * within a single database transaction.
+ * Touches: users
+ * Update the password hash for a user account.
  * 
- * @param string $name
- * @param string $address
- * @param string $location
- * @param string $phone
- * @param string $email
- * @param string $passwordHash
- * @return int Inserted hospital ID
+ * @param int $userId
+ * @param string $newPasswordHash
+ * @return bool
  */
-function shared_register_hospital(string $name, string $address, string $location, string $phone, string $email, string $passwordHash): int
+function shared_update_user_password(int $userId, string $newPasswordHash): bool
 {
-    $pdo = db();
-    $pdo->beginTransaction();
-    try {
-        // SHARED TABLE: hospitals
-        $stmtHosp = $pdo->prepare("INSERT INTO hospitals (name, address, location, phone) VALUES (?, ?, ?, ?)");
-        $stmtHosp->execute([$name, $address, $location, $phone]);
-        $hospitalId = (int)$pdo->lastInsertId();
-
-        // Create hospital login credentials linked to hospital_id
-        $stmtUser = $pdo->prepare("INSERT INTO hospital_users (hospital_id, email, password_hash) VALUES (?, ?, ?)");
-        $stmtUser->execute([$hospitalId, $email, $passwordHash]);
-
-        $pdo->commit();
-        return $hospitalId;
-    } catch (Throwable $e) {
-        $pdo->rollBack();
-        throw $e;
-    }
+    // Touches: users
+    $sql = "UPDATE users SET password_hash = ? WHERE user_id = ?";
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$newPasswordHash, $userId]);
+    return $stmt->rowCount() > 0;
 }

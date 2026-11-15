@@ -839,7 +839,7 @@ CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW 
 --
 DROP TABLE IF EXISTS `v_vaccine_availability`;
 
-CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v_vaccine_availability`  AS SELECT `v`.`vaccine_id` AS `vaccine_id`, `v`.`vaccine_name` AS `vaccine_name`, `v`.`disease_prevented` AS `disease_prevented`, coalesce(sum(`s`.`status` = 'available'),0) AS `hospitals_available`, coalesce(sum(`s`.`quantity`),0) AS `total_quantity`, CASE WHEN coalesce(sum(`s`.`status` = 'available'),0) > 0 THEN 'available' ELSE 'unavailable' END AS `overall_status` FROM (`vaccines` `v` left join `hospital_vaccine_stock` `s` on(`s`.`vaccine_id` = `v`.`vaccine_id`)) WHERE `v`.`is_active` = 1 GROUP BY `v`.`vaccine_id`, `v`.`vaccine_name`, `v`.`disease_prevented``disease_prevented`  ;
+CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v_vaccine_availability`  AS SELECT `v`.`vaccine_id` AS `vaccine_id`, `v`.`vaccine_name` AS `vaccine_name`, `v`.`disease_prevented` AS `disease_prevented`, coalesce(sum(`s`.`status` = 'available'),0) AS `hospitals_available`, coalesce(sum(`s`.`quantity`),0) AS `total_quantity`, CASE WHEN coalesce(sum(`s`.`status` = 'available'),0) > 0 THEN 'available' ELSE 'unavailable' END AS `overall_status` FROM (`vaccines` `v` left join `hospital_vaccine_stock` `s` on(`s`.`vaccine_id` = `v`.`vaccine_id`)) WHERE `v`.`is_active` = 1 GROUP BY `v`.`vaccine_id`, `v`.`vaccine_name`, `v`.`disease_prevented`  ;
 
 --
 -- Indexes for dumped tables

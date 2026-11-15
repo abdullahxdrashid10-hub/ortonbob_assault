@@ -1,7 +1,10 @@
 <?php
 /**
- * header.php - shared page layout (top). Set before including:
- *   $title (string) and $role ('parent' | 'hospital' | null for public pages)
+ * header.php - Shared Page Layout (Top).
+ * Included at the top of every user-facing page.
+ * 
+ * Task G: For Step 3A parent navigation, displays only currently built pages:
+ * Dashboard, My Children, Schedule, Profile, and Logout.
  */
 require_once __DIR__ . '/../config/config.php';
 $role = $role ?? null;
@@ -26,9 +29,6 @@ $B = BASE_URL;
     <a href="<?= $B ?>/parent/dashboard.php">Dashboard</a>
     <a href="<?= $B ?>/parent/children.php">My Children</a>
     <a href="<?= $B ?>/parent/schedule.php">Schedule</a>
-    <a href="<?= $B ?>/parent/hospitals.php">Hospitals</a>
-    <a href="<?= $B ?>/parent/bookings.php">Bookings</a>
-    <a href="<?= $B ?>/parent/report.php">Reports</a>
     <a href="<?= $B ?>/parent/profile.php">Profile</a>
     <!-- Task 7: Logout as POST form with CSRF token -->
     <form method="post" action="<?= $B ?>/parent/logout.php" style="display:inline; margin:0;">
@@ -38,7 +38,6 @@ $B = BASE_URL;
   <?php elseif ($role === 'hospital' && !empty($_SESSION['hospital_id'])): ?>
     <a href="<?= $B ?>/hospital/appointments.php">Appointments</a>
     <span class="who"><?= e($_SESSION['hospital_name'] ?? '') ?></span>
-    <!-- Task 7: Logout as POST form with CSRF token -->
     <form method="post" action="<?= $B ?>/hospital/logout.php" style="display:inline; margin:0;">
       <?= csrf_field() ?>
       <button type="submit" class="btn btn-sm">Logout</button>

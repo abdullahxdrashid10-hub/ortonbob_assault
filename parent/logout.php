@@ -2,11 +2,12 @@
 /**
  * logout.php - Parent Account Logout
  * 
- * Task 7: Requires HTTP POST with a verified CSRF token to prevent
- * unauthorized or cross-site logout requests. Destroys active session.
+ * Requires HTTP POST with a verified CSRF token to prevent
+ * unauthorized logout triggers. Destroys active session via auth_logout().
  */
 
 require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../includes/auth.php';
 
 // Only allow state-changing logout via POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -16,9 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 // Verify CSRF token
 csrf_check();
 
-// Clear and destroy session
-$_SESSION = [];
-session_destroy();
-session_start();
+// Terminate session
+auth_logout();
 flash('success', 'You have been successfully logged out.');
 redirect('parent/login.php');

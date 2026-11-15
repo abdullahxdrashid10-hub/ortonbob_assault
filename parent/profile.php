@@ -1,28 +1,27 @@
 <?php
 /**
- * profile.php - Parent Profile Management & Security Settings
+ * profile.php - Parent Profile & Account Security Management
  * 
- * Includes two distinct, secure forms:
- * 1. Personal Information Form: Edit full name, phone, and residential address.
- * 2. Password Security Form: Change login credentials (requires verification
- *    of current password before hashing and saving the new password).
+ * Task G: Built against the team's unified schema:
+ * 1. Edit Contact Information: full_name, phone, address, city, cnic in `parents` table.
+ * 2. Password Security: updates password_hash in `users` table after verifying current password.
  */
 
 $role = 'parent';
 $title = 'My Profile';
 require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/shared_queries.php';
 
 // Authentication guard
 require_parent();
 $parentId = (int)$_SESSION['parent_id'];
+$userId   = (int)$_SESSION['user_id'];
 
-// Fetch current parent account details
-$stmt = db()->prepare("SELECT id, full_name, email, phone, address, password_hash, created_at FROM parents WHERE id = ?");
-$stmt->execute([$parentId]);
-$parent = $stmt->fetch();
-
-if (!$parent) {
-    flash('error', 'Parent account record not found.');
+// Load profile joining parents and users
+$profile = shared_get_parent_profile($parentId);
+if (!$profile) {
+    flash('error', 'Profile record not found.');
     redirect('parent/login.php');
 }
 
@@ -31,49 +30,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
 
-    // Action 1: Update Profile Contact Information
+    // Action 1: Update Parent Contact Details in `parents` table
     if ($action === 'update_profile') {
         $fullName = trim($_POST['full_name'] ?? '');
-        $phone = trim($_POST['phone'] ?? '');
-        $address = trim($_POST['address'] ?? '');
+        $phone    = trim($_POST['phone'] ?? '');
+        $address  = trim($_POST['address'] ?? '');
+        $city     = trim($_POST['city'] ?? '');
+        $cnic     = trim($_POST['cnic'] ?? '') ?: null;
 
-        if ($fullName === '' || $phone === '' || $address === '') {
-            flash('error', 'All contact profile fields (Full Name, Phone, and Address) are required.');
+        if ($fullName === '' || $phone === '') {
+            flash('error', 'Full Name and Phone Number are required fields.');
         } else {
-            $up = db()->prepare("UPDATE parents SET full_name = ?, phone = ?, address = ? WHERE id = ?");
-            $up->execute([$fullName, $phone, $address, $parentId]);
+            try {
+                shared_update_parent_profile(
+                    $parentId,
+                    $fullName,
+                    $phone,
+                    $address ?: null,
+                    $city ?: null,
+                    $cnic
+                );
 
-            // Update active session name
-            $_SESSION['parent_name'] = $fullName;
-            $parent['full_name'] = $fullName;
-            $parent['phone'] = $phone;
-            $parent['address'] = $address;
-
-            flash('success', 'Profile information updated successfully.');
-            redirect('parent/profile.php');
+                // Update active session name
+                $_SESSION['parent_name'] = $fullName;
+                flash('success', 'Profile contact details updated successfully.');
+                redirect('parent/profile.php');
+            } catch (PDOException $e) {
+                if ($e->errorInfo[1] === 1062) {
+                    flash('error', 'That CNIC is already registered to another parent profile.');
+                } else {
+                    flash('error', 'Failed to update profile details.');
+                }
+            }
         }
     }
 
-    // Action 2: Change Password (requires verifying current password)
+    // Action 2: Change Password in `users` table
     elseif ($action === 'change_password') {
         $currentPassword = $_POST['current_password'] ?? '';
-        $newPassword = $_POST['new_password'] ?? '';
+        $newPassword     = $_POST['new_password'] ?? '';
         $confirmPassword = $_POST['confirm_password'] ?? '';
 
-        // Verification 1: Check that current password matches stored hash
-        if (!password_verify($currentPassword, $parent['password_hash'])) {
+        // Verify that current password matches stored password_hash
+        if (!password_verify($currentPassword, $profile['password_hash'])) {
             flash('error', 'Verification failed: Your current password was incorrect.');
         } elseif (strlen($newPassword) < 6) {
             flash('error', 'New password must be at least 6 characters in length.');
         } elseif ($newPassword !== $confirmPassword) {
             flash('error', 'New password and confirmation password do not match.');
         } else {
-            // Hash the new password securely using Bcrypt (PASSWORD_DEFAULT)
             $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
-            $upPass = db()->prepare("UPDATE parents SET password_hash = ? WHERE id = ?");
-            $upPass->execute([$newHash, $parentId]);
+            shared_update_user_password($userId, $newHash);
 
-            flash('success', 'Password changed successfully! Please use your new password next time you log in.');
+            flash('success', 'Password updated successfully! Please use your new password next time you log in.');
             redirect('parent/profile.php');
         }
     }
@@ -84,11 +93,11 @@ require __DIR__ . '/../includes/header.php';
 
 <div class="reveal">
   <h1>My Profile &amp; Settings</h1>
-  <p class="muted">Manage your personal contact details and account security credentials.</p>
+  <p class="muted">Manage your personal profile and account credentials.</p>
 </div>
 
 <div class="grid2">
-  <!-- Form 1: Edit Profile Details -->
+  <!-- Contact Details Form -->
   <section class="card reveal">
     <h2>Contact Information</h2>
     <form method="post" action="profile.php" class="form">
@@ -96,23 +105,33 @@ require __DIR__ . '/../includes/header.php';
       <input type="hidden" name="action" value="update_profile">
 
       <label>
-        Account Email (Primary identifier):
-        <input type="email" value="<?= e($parent['email']) ?>" disabled style="opacity:0.7; cursor:not-allowed;">
+        Account Email (Permanent Identifier):
+        <input type="email" value="<?= e($profile['email']) ?>" disabled style="opacity:0.7; cursor:not-allowed;">
       </label>
 
       <label>
         Full Name:
-        <input type="text" name="full_name" value="<?= e($parent['full_name']) ?>" required>
+        <input type="text" name="full_name" required value="<?= e($profile['full_name']) ?>">
       </label>
 
       <label>
         Contact Phone:
-        <input type="text" name="phone" value="<?= e($parent['phone']) ?>" required>
+        <input type="text" name="phone" required value="<?= e($profile['phone']) ?>">
+      </label>
+
+      <label>
+        City:
+        <input type="text" name="city" value="<?= e($profile['city'] ?? '') ?>" placeholder="e.g. Karachi">
       </label>
 
       <label>
         Residential Address:
-        <input type="text" name="address" value="<?= e($parent['address']) ?>" required>
+        <input type="text" name="address" value="<?= e($profile['address'] ?? '') ?>" placeholder="e.g. Block 5, Gulshan-e-Iqbal">
+      </label>
+
+      <label>
+        CNIC:
+        <input type="text" name="cnic" value="<?= e($profile['cnic'] ?? '') ?>" placeholder="e.g. 42101-1234567-8">
       </label>
 
       <div style="margin-top:8px;">
@@ -121,11 +140,11 @@ require __DIR__ . '/../includes/header.php';
     </form>
   </section>
 
-  <!-- Form 2: Change Password -->
+  <!-- Change Password Form -->
   <section class="card reveal">
     <h2>Change Password</h2>
     <p class="muted" style="font-size:0.9rem;">
-      To change your login password, please enter your existing password for verification.
+      Enter your current password to authorize a password change.
     </p>
 
     <form method="post" action="profile.php" class="form">
@@ -153,7 +172,7 @@ require __DIR__ . '/../includes/header.php';
     </form>
 
     <div style="margin-top:20px; padding-top:12px; border-top:1px solid var(--line); font-size:0.85rem; color:var(--muted);">
-      <span>Member since: <?= e(date('F d, Y', strtotime($parent['created_at']))) ?></span>
+      <span>Member since: <?= e(date('F d, Y', strtotime($profile['parent_created_at'] ?? $profile['user_created_at']))) ?></span>
     </div>
   </section>
 </div>
