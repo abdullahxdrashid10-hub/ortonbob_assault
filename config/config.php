@@ -10,8 +10,19 @@ const DB_NAME = 'vaccination_db';
 const DB_USER = 'root';
 const DB_PASS = '';
 
-// Base URL of this project (change if the folder is renamed).
-const BASE_URL = '/E project';
+// Task 3: Compute base URL dynamically from project root relative to document root.
+// Encodes segments so URLs have no raw unescaped spaces. Adapts if folder is renamed or moved.
+$docRoot = isset($_SERVER['DOCUMENT_ROOT']) ? str_replace('\\', '/', realpath($_SERVER['DOCUMENT_ROOT'])) : '';
+$projDir = str_replace('\\', '/', realpath(dirname(__DIR__)));
+$computedBase = '';
+if ($docRoot && str_starts_with($projDir, $docRoot)) {
+    $rel = substr($projDir, strlen($docRoot));
+    $parts = array_map('rawurlencode', array_filter(explode('/', str_replace('\\', '/', $rel))));
+    $computedBase = $parts ? '/' . implode('/', $parts) : '';
+}
+if (!defined('BASE_URL')) {
+    define('BASE_URL', $computedBase);
+}
 
 // Booking status values - MUST match the admin panel.
 const ST_PENDING = 'Pending';
@@ -20,7 +31,16 @@ const ST_REJECTED = 'Rejected';
 const ST_VACCINATED = 'Vaccinated';
 const ST_NOT_VACCINATED = 'Not Vaccinated';
 
+// Task 8: Set secure session cookie flags before session_start()
 if (session_status() === PHP_SESSION_NONE) {
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'domain'   => '',
+        'secure'   => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on',
+        'httponly' => true,
+        'samesite' => 'Lax'
+    ]);
     session_start();
 }
 

@@ -30,11 +30,19 @@ $B = BASE_URL;
     <a href="<?= $B ?>/parent/bookings.php">Bookings</a>
     <a href="<?= $B ?>/parent/report.php">Reports</a>
     <a href="<?= $B ?>/parent/profile.php">Profile</a>
-    <a class="btn btn-sm" href="<?= $B ?>/parent/logout.php">Logout</a>
+    <!-- Task 7: Logout as POST form with CSRF token -->
+    <form method="post" action="<?= $B ?>/parent/logout.php" style="display:inline; margin:0;">
+      <?= csrf_field() ?>
+      <button type="submit" class="btn btn-sm">Logout</button>
+    </form>
   <?php elseif ($role === 'hospital' && !empty($_SESSION['hospital_id'])): ?>
     <a href="<?= $B ?>/hospital/appointments.php">Appointments</a>
     <span class="who"><?= e($_SESSION['hospital_name'] ?? '') ?></span>
-    <a class="btn btn-sm" href="<?= $B ?>/hospital/logout.php">Logout</a>
+    <!-- Task 7: Logout as POST form with CSRF token -->
+    <form method="post" action="<?= $B ?>/hospital/logout.php" style="display:inline; margin:0;">
+      <?= csrf_field() ?>
+      <button type="submit" class="btn btn-sm">Logout</button>
+    </form>
   <?php else: ?>
     <a href="<?= $B ?>/parent/login.php">Parent Login</a>
     <a href="<?= $B ?>/hospital/login.php">Hospital Login</a>

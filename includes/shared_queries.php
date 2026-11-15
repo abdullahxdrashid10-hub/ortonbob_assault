@@ -127,6 +127,22 @@ function shared_has_active_or_completed_booking(int $childId, int $vaccineId): b
 
 /**
  * SHARED TABLE: bookings
+ * Task 2: Check if a child has ANY booking records (regardless of status).
+ * Used to guard against child deletion when historical records exist.
+ * 
+ * @param int $childId
+ * @return bool
+ */
+function shared_child_has_bookings(int $childId): bool
+{
+    // SHARED TABLE: bookings
+    $stmt = db()->prepare("SELECT 1 FROM bookings WHERE child_id = ? LIMIT 1");
+    $stmt->execute([$childId]);
+    return (bool)$stmt->fetch();
+}
+
+/**
+ * SHARED TABLE: bookings
  * Create a new vaccination booking with initial status 'Pending'.
  * 
  * @param int $childId
@@ -324,4 +340,134 @@ function shared_get_vaccination_report(int $parentId, int $childId = 0): array
     }
     $stmt->execute($params);
     return $stmt->fetchAll();
+}
+
+/**
+ * SHARED TABLE: bookings
+ * Tasks 1 & 5: Update booking status by hospital staff.
+ * - If status is 'Vaccinated', sets status and vaccinated_on = NOW().
+ * - If status is 'Not Vaccinated', sets status and vaccinated_on = NULL.
+ * - WHERE clause strictly enforces: hospital owns booking AND current status is 'Approved'.
+ * 
+ * @param int $bookingId
+ * @param int $hospitalId
+ * @param string $newStatus ('Vaccinated' | 'Not Vaccinated')
+ * @return bool True if a row was updated, false otherwise.
+ */
+function shared_hospital_update_booking_status(int $bookingId, int $hospitalId, string $newStatus): bool
+{
+    // SHARED TABLE: bookings
+    if ($newStatus === ST_VACCINATED) {
+        $sql = "UPDATE bookings 
+                SET status = :status, vaccinated_on = NOW() 
+                WHERE id = :id AND hospital_id = :hid AND status = 'Approved'";
+    } else {
+        $sql = "UPDATE bookings 
+                SET status = :status, vaccinated_on = NULL 
+                WHERE id = :id AND hospital_id = :hid AND status = 'Approved'";
+    }
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute([
+        ':status' => $newStatus,
+        ':id'     => $bookingId,
+        ':hid'    => $hospitalId
+    ]);
+    return $stmt->rowCount() > 0;
+}
+
+/**
+ * SHARED TABLE: bookings, children, parents, vaccines
+ * Task 5: Fetch appointments belonging to a specific hospital filtered by status.
+ * 
+ * @param int $hospitalId
+ * @param string $statusFilter ('Approved' | 'Vaccinated' | 'Not Vaccinated')
+ * @return array
+ */
+function shared_get_hospital_appointments(int $hospitalId, string $statusFilter): array
+{
+    // SHARED TABLE: bookings, vaccines
+    $sql = "SELECT b.id, b.booking_date, b.booking_time, b.status, b.vaccinated_on,
+                   c.full_name AS child, c.dob, c.gender,
+                   v.name AS vaccine,
+                   p.full_name AS parent, p.phone
+            FROM bookings b
+            JOIN children c ON c.id = b.child_id
+            JOIN parents p ON p.id = c.parent_id
+            JOIN vaccines v ON v.id = b.vaccine_id
+            WHERE b.hospital_id = ? AND b.status = ?
+            ORDER BY b.booking_date ASC, b.booking_time ASC, b.id ASC";
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$hospitalId, $statusFilter]);
+    return $stmt->fetchAll();
+}
+
+/**
+ * SHARED TABLE: hospitals
+ * Task 5: Fetch hospital user credentials and hospital display name for login.
+ * 
+ * @param string $email
+ * @return array|null
+ */
+function shared_get_hospital_user_by_email(string $email): ?array
+{
+    // SHARED TABLE: hospitals
+    $sql = "SELECT u.id, u.hospital_id, u.email, u.password_hash, h.name 
+            FROM hospital_users u 
+            JOIN hospitals h ON h.id = u.hospital_id 
+            WHERE u.email = ?";
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$email]);
+    $res = $stmt->fetch();
+    return $res ?: null;
+}
+
+/**
+ * SHARED TABLE: hospitals
+ * Task 5: Check if hospital login email is already registered.
+ * 
+ * @param string $email
+ * @return bool
+ */
+function shared_hospital_email_exists(string $email): bool
+{
+    $stmt = db()->prepare("SELECT id FROM hospital_users WHERE email = ?");
+    $stmt->execute([$email]);
+    return (bool)$stmt->fetch();
+}
+
+/**
+ * SHARED TABLE: hospitals
+ * Task 5: Register a new hospital and create its associated login credentials
+ * within a single database transaction.
+ * 
+ * @param string $name
+ * @param string $address
+ * @param string $location
+ * @param string $phone
+ * @param string $email
+ * @param string $passwordHash
+ * @return int Inserted hospital ID
+ */
+function shared_register_hospital(string $name, string $address, string $location, string $phone, string $email, string $passwordHash): int
+{
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        // SHARED TABLE: hospitals
+        $stmtHosp = $pdo->prepare("INSERT INTO hospitals (name, address, location, phone) VALUES (?, ?, ?, ?)");
+        $stmtHosp->execute([$name, $address, $location, $phone]);
+        $hospitalId = (int)$pdo->lastInsertId();
+
+        // Create hospital login credentials linked to hospital_id
+        $stmtUser = $pdo->prepare("INSERT INTO hospital_users (hospital_id, email, password_hash) VALUES (?, ?, ?)");
+        $stmtUser->execute([$hospitalId, $email, $passwordHash]);
+
+        $pdo->commit();
+        return $hospitalId;
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
 }

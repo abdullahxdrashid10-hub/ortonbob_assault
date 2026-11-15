@@ -1,11 +1,15 @@
 <?php
 /**
- * Hospital registration. Creates the hospital record (name/address/location)
- * and our own hospital_users login row linked to it.
- * SHARED TABLE: hospitals insert is isolated below - adapt when admin schema arrives.
+ * register.php - Hospital Facility Registration
+ * 
+ * Creates an approved hospital record and creates its login credentials.
+ * Task 5: Uses centralized shared queries in shared_queries.php.
  */
-$role = 'hospital'; $title = 'Hospital Register';
+
+$role = 'hospital';
+$title = 'Hospital Register';
 require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../includes/shared_queries.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -15,44 +19,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $phone = trim($_POST['phone'] ?? '');
     $email = strtolower(trim($_POST['email'] ?? ''));
     $pass = $_POST['password'] ?? '';
+
     if ($name === '' || $addr === '' || $loc === '') {
-        flash('error', 'Name, address and location are required.');
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($pass) < 6) {
-        flash('error', 'Valid email and a password of 6+ characters are required.');
+        flash('error', 'Hospital name, address, and city/location are required.');
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        flash('error', 'Please provide a valid official email address.');
+    } elseif (strlen($pass) < 6) {
+        flash('error', 'Password must be at least 6 characters in length.');
     } else {
-        $dup = db()->prepare('SELECT id FROM hospital_users WHERE email=?');
-        $dup->execute([$email]);
-        if ($dup->fetch()) {
-            flash('error', 'That email is already registered.');
+        // Task 5: Check duplicate email via centralized query
+        if (shared_hospital_email_exists($email)) {
+            flash('error', 'That email address is already registered to a hospital account.');
         } else {
-            $pdo = db();
-            $pdo->beginTransaction(); // both inserts succeed or neither does
-            // SHARED TABLE: hospitals
-            $pdo->prepare('INSERT INTO hospitals (name,address,location,phone) VALUES (?,?,?,?)')
-                ->execute([$name, $addr, $loc, $phone]);
-            $hid = $pdo->lastInsertId();
-            $pdo->prepare('INSERT INTO hospital_users (hospital_id,email,password_hash) VALUES (?,?,?)')
-                ->execute([$hid, $email, password_hash($pass, PASSWORD_DEFAULT)]);
-            $pdo->commit();
-            flash('success', 'Hospital registered. Please log in.');
+            // Task 5: Create hospital and credentials via centralized query with SHARED TABLE comments
+            $hash = password_hash($pass, PASSWORD_DEFAULT);
+            shared_register_hospital($name, $addr, $loc, $phone, $email, $hash);
+            flash('success', 'Hospital registered successfully! Please log in with your credentials.');
             redirect('hospital/login.php');
         }
     }
 }
+
 require __DIR__ . '/../includes/header.php';
 ?>
+
 <section class="card auth reveal">
-  <h1>Register hospital</h1>
-  <form method="post" class="form">
+  <h1>Register Hospital</h1>
+  <p class="muted">Enroll your healthcare facility as an authorized child vaccination center.</p>
+
+  <form method="post" action="register.php" class="form">
     <?= csrf_field() ?>
-    <label>Hospital name<input name="name" required value="<?= e($_POST['name'] ?? '') ?>"></label>
-    <label>Address<input name="address" required value="<?= e($_POST['address'] ?? '') ?>"></label>
-    <label>Location / city<input name="location" required value="<?= e($_POST['location'] ?? '') ?>"></label>
-    <label>Phone<input name="phone" value="<?= e($_POST['phone'] ?? '') ?>"></label>
-    <label>Login email<input type="email" name="email" required value="<?= e($_POST['email'] ?? '') ?>"></label>
-    <label>Password<input type="password" name="password" minlength="6" required></label>
-    <button class="btn">Register</button>
-    <p class="muted">Already registered? <a href="login.php">Log in</a></p>
+    <label>
+      Hospital / Clinic Name:
+      <input type="text" name="name" required value="<?= e($_POST['name'] ?? '') ?>" placeholder="e.g. City General Hospital">
+    </label>
+    <label>
+      Physical Address:
+      <input type="text" name="address" required value="<?= e($_POST['address'] ?? '') ?>" placeholder="Street, block, or area">
+    </label>
+    <label>
+      City / Location:
+      <input type="text" name="location" required value="<?= e($_POST['location'] ?? '') ?>" placeholder="e.g. Karachi">
+    </label>
+    <label>
+      Contact Phone:
+      <input type="text" name="phone" value="<?= e($_POST['phone'] ?? '') ?>" placeholder="e.g. 021-34567890">
+    </label>
+    <label>
+      Staff Login Email:
+      <input type="email" name="email" required value="<?= e($_POST['email'] ?? '') ?>" placeholder="staff@hospital.pk">
+    </label>
+    <label>
+      Password (min 6 characters):
+      <input type="password" name="password" minlength="6" required placeholder="Choose a secure password">
+    </label>
+    <div style="margin-top:8px;">
+      <button type="submit" class="btn" style="width:100%;">Complete Registration</button>
+    </div>
+    <p class="muted" style="text-align:center; margin-top:14px;">
+      Already registered? <a href="login.php">Log In</a>
+    </p>
   </form>
 </section>
+
 <?php require __DIR__ . '/../includes/footer.php'; ?>

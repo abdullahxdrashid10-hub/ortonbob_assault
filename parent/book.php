@@ -4,7 +4,9 @@
  * 
  * Handles scheduling a vaccination slot:
  * - Child: Restrict strictly to the logged-in parent's verified children
- * - Vaccine: Restrict to active vaccines (available = 1) present in vaccine schedule
+ * - Vaccine: Restrict to active vaccines present in the child's bookable list
+ * - Task 4: Server-side rejection if vaccine is not in bookable list or if its
+ *   scheduled due date (dob + due_after_days) is more than 30 days in the future.
  * - Hospital: Select from approved facilities
  * - Preferred Date: Validated server-side to be today or a future date
  * - Duplicate Prevention: Rejects booking if child + vaccine already has status
@@ -39,7 +41,7 @@ foreach ($children as $c) {
 $hospitals = shared_search_hospitals('');
 $selectedHospitalId = (int)($_POST['hospital_id'] ?? $_GET['hospital_id'] ?? $_GET['hospital'] ?? 0);
 
-// 3. Fetch vaccines for the selected child that are available and not already booked/taken
+// 3. Fetch bookable vaccines for the selected child (SHARED TABLE: vaccines, bookings)
 $bookableVaccines = [];
 if ($currentChild) {
     $bookableVaccines = shared_get_bookable_vaccines_for_child($currentChild['id']);
@@ -58,42 +60,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $formTime = ($formTime !== '') ? $formTime : null;
 
     // Validate ownership: Child MUST belong to the logged-in parent
-    $verifyChild = db()->prepare("SELECT id, full_name FROM children WHERE id = ? AND parent_id = ?");
+    $verifyChild = db()->prepare("SELECT id, full_name, dob FROM children WHERE id = ? AND parent_id = ?");
     $verifyChild->execute([$formChildId, $parentId]);
     $verifiedChild = $verifyChild->fetch();
 
     // Validate hospital existence (SHARED TABLE: hospitals)
     $verifiedHospital = shared_get_hospital_by_id($formHospitalId);
 
-    // Validate vaccine existence and availability (SHARED TABLE: vaccines)
-    $verifiedVaccine = shared_get_vaccine_by_id($formVaccineId);
-
-    // Validate date format (YYYY-MM-DD) and ensure date is not in the past
+    // Validate appointment date format (YYYY-MM-DD) and ensure date is not in the past
     $today = date('Y-m-d');
     $isValidDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', $formDate) && ($formDate >= $today);
 
-    // Run security and integrity validations
+    // Initial basic validations
     if (!$verifiedChild) {
         flash('error', 'Security error: Invalid child selected.');
     } elseif (!$verifiedHospital) {
         flash('error', 'Please select a valid hospital from the directory.');
-    } elseif (!$verifiedVaccine || (int)$verifiedVaccine['available'] !== 1) {
-        flash('error', 'The selected vaccine is currently unavailable or invalid.');
     } elseif (!$isValidDate) {
         flash('error', 'Appointment date must be today or a future date.');
     } else {
-        // Enforce business rule: Check if this child already has a Pending, Approved, or Vaccinated booking
-        // Centralized query in shared_queries.php (SHARED TABLE: bookings)
-        $hasActiveBooking = shared_has_active_or_completed_booking($formChildId, $formVaccineId);
+        // Task 4: Server-side check that vaccine is in child's bookable list
+        $childBookableList = shared_get_bookable_vaccines_for_child($formChildId);
+        $matchedBookableVaccine = null;
 
-        if ($hasActiveBooking) {
-            flash('error', 'Booking rejected: This vaccine is already active (Pending/Approved) or already completed (Vaccinated) for ' . $verifiedChild['full_name'] . '.');
+        foreach ($childBookableList as $item) {
+            if ((int)$item['id'] === $formVaccineId) {
+                $matchedBookableVaccine = $item;
+                break;
+            }
+        }
+
+        if (!$matchedBookableVaccine) {
+            flash('error', 'The selected vaccine is not currently eligible for booking for this child.');
         } else {
-            // Insert new booking record with status 'Pending'
-            // Centralized query in shared_queries.php (SHARED TABLE: bookings)
-            shared_create_booking($formChildId, $formVaccineId, $formHospitalId, $formDate, $formTime);
-            flash('success', 'Appointment request submitted successfully! Your booking is currently Pending admin approval.');
-            redirect('parent/bookings.php');
+            // Task 4: Reject doses whose scheduled due date is more than 30 days in the future
+            // due = dob + due_after_days
+            $daysOffset = (int)$matchedBookableVaccine['due_after_days'];
+            $calculatedDueDate = date('Y-m-d', strtotime($verifiedChild['dob'] . " + $daysOffset days"));
+            $maxAllowedDueDate = date('Y-m-d', strtotime('+30 days'));
+
+            if ($calculatedDueDate > $maxAllowedDueDate) {
+                flash('error', 'This vaccine dose is scheduled for ' . $calculatedDueDate . ', which is more than 30 days away. You can only book vaccinations that are overdue or due within the next 30 days.');
+            } else {
+                // Enforce duplicate check (SHARED TABLE: bookings)
+                $hasActiveBooking = shared_has_active_or_completed_booking($formChildId, $formVaccineId);
+
+                if ($hasActiveBooking) {
+                    flash('error', 'Booking rejected: This vaccine is already active (Pending/Approved) or completed (Vaccinated) for ' . $verifiedChild['full_name'] . '.');
+                } else {
+                    // Create new booking with status 'Pending' (SHARED TABLE: bookings)
+                    shared_create_booking($formChildId, $formVaccineId, $formHospitalId, $formDate, $formTime);
+                    flash('success', 'Appointment request submitted successfully! Your booking is currently Pending admin approval.');
+                    redirect('parent/bookings.php');
+                }
+            }
         }
     }
 
@@ -113,13 +133,11 @@ require __DIR__ . '/../includes/header.php';
 
 <section class="card auth reveal" style="max-width:560px;">
   <?php if (empty($children)): ?>
-    <!-- Prerequisite: Must register a child first -->
     <div style="text-align:center; padding:20px 0;">
       <p class="muted">You must register at least one child before booking an appointment.</p>
       <a class="btn" href="children.php">Register a Child</a>
     </div>
   <?php elseif (empty($hospitals)): ?>
-    <!-- Prerequisite: Hospitals must exist in system -->
     <div style="text-align:center; padding:20px 0;">
       <p class="muted">No hospitals are currently registered in the system. Please check back later.</p>
     </div>
@@ -154,8 +172,14 @@ require __DIR__ . '/../includes/header.php';
           <select name="vaccine_id" required>
             <option value="">-- Choose Vaccine --</option>
             <?php foreach ($bookableVaccines as $bv): ?>
+              <?php 
+                // Calculate due date for display
+                $dOffset = (int)$bv['due_after_days'];
+                $itemDue = date('Y-m-d', strtotime($currentChild['dob'] . " + $dOffset days"));
+                $isFarFuture = ($itemDue > date('Y-m-d', strtotime('+30 days')));
+              ?>
               <option value="<?= (int)$bv['id'] ?>" <?= ((int)$bv['id'] === $selectedVaccineId) ? 'selected' : '' ?>>
-                <?= e($bv['name']) ?> &middot; <?= e($bv['description'] ?? 'Scheduled dose') ?>
+                <?= e($bv['name']) ?> &middot; Due: <?= e($itemDue) ?> <?= $isFarFuture ? '(>30 days away)' : '' ?>
               </option>
             <?php endforeach; ?>
           </select>
@@ -198,7 +222,7 @@ require __DIR__ . '/../includes/header.php';
         >
       </label>
 
-      <div style="margin-top:10px;">
+      <div style="margin-top:8px;">
         <button 
           type="submit" 
           class="btn" 
