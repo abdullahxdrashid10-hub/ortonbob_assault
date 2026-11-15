@@ -76,4 +76,21 @@ select option{color:#000}
  .nav-links{display:none;position:absolute;top:100%;left:0;right:0;flex-direction:column;background:var(--bg);padding:16px;border-bottom:1px solid var(--line)}
  .nav-links.open{display:flex}
 }
-@media print{.nav,.footer,.search,#bg-canvas{display:none}body{background:#fff;color:#000}.card{border:0}}
+/* Grouped cards and schedule list */
+.group-title{font-size:1.15rem;font-weight:700;color:var(--a);margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.group-title:first-child{margin-top:0}
+.schedule-table th, .schedule-table td{padding:10px 8px;vertical-align:middle}
+.select-bar{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+
+@media print{
+  .nav, .footer, .search, #bg-canvas, .actions, .btn, .select-bar, .nav-toggle{display:none !important}
+  body{background:#fff !important;color:#000 !important;font-size:12pt}
+  .container{width:100% !important;padding:0 !important;margin:0 !important}
+  .card{border:1px solid #ccc !important;background:none !important;box-shadow:none !important;backdrop-filter:none !important;color:#000 !important}
+  .table{width:100% !important;border-collapse:collapse !important}
+  .table th, .table td{border:1px solid #ddd !important;color:#000 !important;padding:8px !important}
+  .table th{background:#f4f4f4 !important}
+  .badge{border:1px solid #888;color:#000 !important;background:none !important}
+  h1,h2,h3{color:#000 !important}
+  .muted{color:#555 !important}
+}

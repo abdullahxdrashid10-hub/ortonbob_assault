@@ -53,6 +53,7 @@ require __DIR__ . '/../includes/header.php';
   <div class="row">
     <div><b><?= e($k['full_name']) ?></b><br><span class="muted"><?= e($k['gender']) ?> &middot; <?= e(age_text($k['dob'])) ?> &middot; <?= e($k['dob']) ?></span></div>
     <div class="actions">
+      <a class="btn btn-sm btn-ghost" href="schedule.php?child_id=<?= (int)$k['id'] ?>">Schedule</a>
       <a class="btn btn-sm" href="child_edit.php?id=<?= (int)$k['id'] ?>">Edit</a>
       <form method="post" onsubmit="return confirm('Remove this child?')">
         <?= csrf_field() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$k['id'] ?>">

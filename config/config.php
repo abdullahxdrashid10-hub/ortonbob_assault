@@ -112,8 +112,15 @@ function age_text(string $dob): string
 function badge(string $status): string
 {
     $map = [
-        ST_PENDING => 'b-pending', ST_APPROVED => 'b-approved', ST_REJECTED => 'b-rejected',
-        ST_VACCINATED => 'b-done', ST_NOT_VACCINATED => 'b-missed',
+        ST_PENDING => 'b-pending', 
+        ST_APPROVED => 'b-approved', 
+        ST_REJECTED => 'b-rejected',
+        ST_VACCINATED => 'b-done', 
+        ST_NOT_VACCINATED => 'b-missed',
+        'Taken' => 'b-done',
+        'Booked' => 'b-approved',
+        'Overdue' => 'b-rejected',
+        'Upcoming' => 'b-pending',
     ];
     return '<span class="badge ' . ($map[$status] ?? '') . '">' . e($status) . '</span>';
 }

@@ -1,34 +1,94 @@
 <?php
-/** Search hospitals by name/location. Optional ?child=&vaccine= carried to booking. */
-$role = 'parent'; $title = 'Hospitals';
-require_once __DIR__ . '/../config/config.php';
-require_parent();
-$s = trim($_GET['q'] ?? '');
-$child = (int)($_GET['child'] ?? 0);
-$vaccine = (int)($_GET['vaccine'] ?? 0);
+/**
+ * hospitals.php - Hospital Directory & Search
+ * 
+ * Lists approved vaccination centers/hospitals.
+ * Supports keyword search across hospital name, city/location, and address
+ * using parameterized PDO queries. Preserves selected child/vaccine context
+ * for seamless transition to appointment booking.
+ */
 
-// SHARED TABLE: hospitals (read only).
-$q = db()->prepare('SELECT * FROM hospitals WHERE name LIKE :s OR location LIKE :s OR address LIKE :s ORDER BY name');
-$q->execute([':s' => "%$s%"]);
-$list = $q->fetchAll();
+$role = 'parent';
+$title = 'Hospitals Directory';
+require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../includes/shared_queries.php';
+
+// Authentication guard
+require_parent();
+
+// Search keyword from GET parameter
+$searchTerm = trim($_GET['q'] ?? '');
+
+// Contextual booking parameters (optional, forwarded from dashboard or schedule)
+$childId = (int)($_GET['child_id'] ?? $_GET['child'] ?? 0);
+$vaccineId = (int)($_GET['vaccine_id'] ?? $_GET['vaccine'] ?? 0);
+
+// Fetch matching hospitals using centralized shared query (SHARED TABLE: hospitals)
+$hospitals = shared_search_hospitals($searchTerm);
+
 require __DIR__ . '/../includes/header.php';
 ?>
-<h1 class="reveal">Find a hospital</h1>
-<form class="search reveal" method="get">
-  <input name="q" placeholder="Search by name or city" value="<?= e($s) ?>">
-  <?php if ($child): ?><input type="hidden" name="child" value="<?= $child ?>"><?php endif; ?>
-  <?php if ($vaccine): ?><input type="hidden" name="vaccine" value="<?= $vaccine ?>"><?php endif; ?>
-  <button class="btn">Search</button>
-</form>
-<div class="cards">
-<?php if (!$list): ?><p class="muted">No hospitals found.</p><?php endif; ?>
-<?php foreach ($list as $h): ?>
-  <article class="card hover reveal">
-    <h3><?= e($h['name']) ?></h3>
-    <p class="muted">&#128205; <?= e($h['address']) ?>, <?= e($h['location']) ?></p>
-    <?php if (!empty($h['phone'])): ?><p class="muted">&#128222; <?= e($h['phone']) ?></p><?php endif; ?>
-    <a class="btn btn-sm" href="book.php?hospital=<?= (int)$h['id'] ?>&child=<?= $child ?>&vaccine=<?= $vaccine ?>">Book here</a>
-  </article>
-<?php endforeach; ?>
+
+<div class="reveal">
+  <h1>Vaccination Centers &amp; Hospitals</h1>
+  <p class="muted">Find certified healthcare facilities offering infant and adolescent immunization.</p>
 </div>
+
+<!-- Search Form -->
+<form method="get" action="hospitals.php" class="search reveal">
+  <input 
+    type="text" 
+    name="q" 
+    placeholder="Search hospitals by name, city, or address..." 
+    value="<?= e($searchTerm) ?>"
+  >
+  <?php if ($childId > 0): ?>
+    <input type="hidden" name="child_id" value="<?= $childId ?>">
+  <?php endif; ?>
+  <?php if ($vaccineId > 0): ?>
+    <input type="hidden" name="vaccine_id" value="<?= $vaccineId ?>">
+  <?php endif; ?>
+  <button type="submit" class="btn">Search</button>
+  <?php if ($searchTerm !== ''): ?>
+    <a href="hospitals.php<?= ($childId || $vaccineId) ? '?child_id=' . $childId . '&vaccine_id=' . $vaccineId : '' ?>" class="btn btn-ghost">Reset</a>
+  <?php endif; ?>
+</form>
+
+<!-- Hospital Results Grid -->
+<div class="cards">
+  <?php if (empty($hospitals)): ?>
+    <div class="card reveal" style="grid-column: 1 / -1; text-align:center; padding:30px;">
+      <p class="muted">No hospitals matched your search criteria: "<?= e($searchTerm) ?>"</p>
+      <a class="btn btn-sm" href="hospitals.php">View All Hospitals</a>
+    </div>
+  <?php else: ?>
+    <?php foreach ($hospitals as $h): ?>
+      <article class="card hover reveal" style="display:flex; flex-direction:column; justify-content:space-between;">
+        <div>
+          <h3 style="margin-bottom:8px;"><?= e($h['name']) ?></h3>
+          <p class="muted" style="margin:4px 0;">
+            &#128205; <?= e($h['address']) ?>, <strong><?= e($h['location']) ?></strong>
+          </p>
+          <?php if (!empty($h['phone'])): ?>
+            <p class="muted" style="margin:4px 0;">
+              &#128222; <?= e($h['phone']) ?>
+            </p>
+          <?php endif; ?>
+        </div>
+
+        <div style="margin-top:16px;">
+          <?php 
+            $bookUrl = 'book.php?hospital_id=' . (int)$h['id'];
+            if ($childId > 0) $bookUrl .= '&child_id=' . $childId;
+            if ($vaccineId > 0) $bookUrl .= '&vaccine_id=' . $vaccineId;
+          ?>
+          <a class="btn btn-sm" style="width:100%; text-align:center;" href="<?= $bookUrl ?>">
+            Book Appointment
+          </a>
+        </div>
+      </article>
+    <?php endforeach; ?>
+  <?php endif; ?>
+</div>
+
 <?php require __DIR__ . '/../includes/footer.php'; ?>

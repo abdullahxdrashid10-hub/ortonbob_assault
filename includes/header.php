@@ -25,6 +25,7 @@ $B = BASE_URL;
   <?php if ($role === 'parent' && !empty($_SESSION['parent_id'])): ?>
     <a href="<?= $B ?>/parent/dashboard.php">Dashboard</a>
     <a href="<?= $B ?>/parent/children.php">My Children</a>
+    <a href="<?= $B ?>/parent/schedule.php">Schedule</a>
     <a href="<?= $B ?>/parent/hospitals.php">Hospitals</a>
     <a href="<?= $B ?>/parent/bookings.php">Bookings</a>
     <a href="<?= $B ?>/parent/report.php">Reports</a>
