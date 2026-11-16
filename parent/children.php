@@ -71,17 +71,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        // Input validation
-        if ($fullName === '') {
-            flash('error', 'Please enter the child\'s full name.');
+        // Task F3: Server-side validation matching database schema column constraints
+        if ($fullName === '' || mb_strlen($fullName) > 120) {
+            flash('error', 'Child full name is required and cannot exceed 120 characters.');
         } elseif (!$isValidDate) {
             flash('error', 'Date of birth must be a valid calendar date, not in the future, and child must not be older than 13 years.');
         } elseif (!in_array($gender, $validGenders, true)) {
             flash('error', 'Please select a valid gender option.');
         } elseif (!in_array($bloodGroup, $validBloodGroups, true)) {
             flash('error', 'Please select a valid blood group option.');
+        } elseif ($weightRaw !== '' && (!is_numeric($weightRaw) || (float)$weightRaw < 0.30 || (float)$weightRaw > 9.99)) {
+            flash('error', 'Birth weight must be a valid number between 0.30 kg and 9.99 kg.');
+        } elseif ($certNo !== null && mb_strlen($certNo) > 60) {
+            flash('error', 'Birth certificate number cannot exceed 60 characters.');
+        } elseif ($allergies !== null && mb_strlen($allergies) > 255) {
+            flash('error', 'Allergies description cannot exceed 255 characters.');
+        } elseif ($notes !== null && mb_strlen($notes) > 1000) {
+            flash('error', 'Medical notes cannot exceed 1000 characters.');
         } else {
-            // Insert child profile
+            // Insert child profile via shared query
             $childId = shared_add_child(
                 $parentId,
                 $fullName,
@@ -94,14 +102,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $notes
             );
 
-            // Verify trigger execution: trg_children_after_insert calls sp_generate_child_schedule()
-            $scheduleCount = shared_count_child_vaccination_rows($childId);
-
-            if ($scheduleCount === 0) {
-                flash('error', 'Child was registered, but automatic vaccination schedule generation failed. Please contact system support.');
+            if ($childId <= 0) {
+                flash('error', 'Child record could not be saved. Please verify your input details.');
             } else {
-                // Task 0b: Do not call e() on text passed to flash() - header already escapes it
-                flash('success', "Child profile for {$fullName} added successfully! $scheduleCount scheduled vaccination doses generated.");
+                // Verify trigger execution: trg_children_after_insert calls sp_generate_child_schedule()
+                $scheduleCount = shared_count_child_vaccination_rows($childId);
+
+                if ($scheduleCount === 0) {
+                    flash('error', 'Child was registered, but automatic vaccination schedule generation failed. Please contact system support.');
+                } else {
+                    // Task 0b: Do not call e() on text passed to flash() - header already escapes it
+                    flash('success', "Child profile for {$fullName} added successfully! $scheduleCount scheduled vaccination doses generated.");
+                }
             }
         }
     }

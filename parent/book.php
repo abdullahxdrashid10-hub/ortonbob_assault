@@ -2,154 +2,119 @@
 /**
  * book.php - Book Vaccination Appointment
  * 
- * Handles scheduling a vaccination slot:
- * - Child: Restrict strictly to the logged-in parent's verified children
- * - Vaccine: Restrict to active vaccines present in the child's bookable list
- * - Task 4: Server-side rejection if vaccine is not in bookable list or if its
- *   scheduled due date (dob + due_after_days) is more than 30 days in the future.
- * - Hospital: Select from approved facilities
- * - Preferred Date: Validated server-side to be today or a future date
- * - Duplicate Prevention: Rejects booking if child + vaccine already has status
- *   Pending, Approved, or Vaccinated.
+ * Task F5 & 3B Item 2: Rebuilt completely for the team's official database schema:
+ * - Links an appointment directly to a child's scheduled dose (child_vaccinations row).
+ * - Enforces the 30-day booking window rule: status in ('upcoming', 'missed') and due_date <= CURDATE() + 30 days.
+ * - Restricts hospital dropdown strictly to active hospitals with stock for the specific vaccine.
+ * - Validates appointment date (today or future) and time slot within hospital operating hours.
+ * - Invokes official stored procedure sp_book_appointment() via shared_book_appointment().
  */
 
 $role = 'parent';
 $title = 'Book Appointment';
 require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/shared_queries.php';
 
 // Authentication guard
 require_parent();
 $parentId = (int)$_SESSION['parent_id'];
 
-// Check if child_vaccination_id was passed from schedule.php
+// Get target child_vaccination_id from request
 $cvId = (int)($_POST['child_vaccination_id'] ?? $_GET['child_vaccination_id'] ?? 0);
-$cvRecord = null;
+$selectedHospitalId = (int)($_POST['hospital_id'] ?? $_GET['hospital_id'] ?? 0);
+
+// Load bookable doses (upcoming/missed within 30 days) across active children of this parent
+$bookableDoses = shared_get_upcoming_doses_for_parent($parentId);
+
+// If no dose specified in request, default to first available bookable dose if exists
+if ($cvId <= 0 && !empty($bookableDoses)) {
+    $cvId = (int)$bookableDoses[0]['child_vaccination_id'];
+}
+
+// Load and verify target dose
+$dose = null;
 if ($cvId > 0) {
-    // Verify ownership and eligibility of the specific dose
-    $stmtCv = db()->prepare("
-        SELECT cv.*, c.parent_id, c.full_name AS child_name, c.date_of_birth
-        FROM child_vaccinations cv
-        JOIN children c ON c.child_id = cv.child_id
-        WHERE cv.child_vaccination_id = ? AND c.parent_id = ? AND c.is_active = 1
-    ");
-    $stmtCv->execute([$cvId, $parentId]);
-    $cvRecord = $stmtCv->fetch();
+    $dose = shared_get_child_vaccination_dose($cvId, $parentId);
+}
 
-    if ($cvRecord) {
-        $st = strtolower($cvRecord['status']);
-        $maxAllowedDueDate = date('Y-m-d', strtotime('+30 days'));
+// Server-side eligibility validation for the selected dose
+$eligibilityError = null;
+if ($cvId > 0 && !$dose) {
+    $eligibilityError = 'The selected vaccination dose was not found or does not belong to your active children.';
+} elseif ($dose) {
+    $today = date('Y-m-d');
+    $maxAllowedDate = date('Y-m-d', strtotime('+30 days'));
 
-        // Task 0e server-side rule: status must be upcoming or missed AND due_date <= today + 30 days
-        if (!in_array($st, [CV_UPCOMING, CV_MISSED], true) || $cvRecord['due_date'] > $maxAllowedDueDate) {
-            flash('error', 'This dose is not eligible for booking. Doses can only be booked if their status is upcoming or missed and due within the next 30 days.');
-            redirect('parent/schedule.php?child_id=' . (int)$cvRecord['child_id']);
-        }
-    } else {
-        flash('error', 'Invalid or unauthorized vaccination dose selected.');
-        redirect('parent/schedule.php');
+    if (!in_array($dose['status'], [CV_UPCOMING, CV_MISSED], true)) {
+        $eligibilityError = "This dose cannot be booked because its current status is '" . ucfirst($dose['status']) . "'.";
+    } elseif ($dose['due_date'] > $maxAllowedDate) {
+        // Enforce 30-day eligibility rule
+        $eligibilityError = "This dose is scheduled for " . date('d-M-Y', strtotime($dose['due_date'])) . 
+                            ". Bookings only open 30 days before the due date.";
     }
 }
 
-// 1. Fetch only children belonging to this parent (OWNERSHIP CHECK)
-$stmtKids = db()->prepare("SELECT id, full_name, dob, gender FROM children WHERE parent_id = ? ORDER BY full_name ASC");
-$stmtKids->execute([$parentId]);
-$children = $stmtKids->fetchAll();
-
-// Determine currently selected child
-$selectedChildId = (int)($_POST['child_id'] ?? $_GET['child_id'] ?? $_GET['child'] ?? ($children[0]['id'] ?? 0));
-$currentChild = null;
-foreach ($children as $c) {
-    if ((int)$c['id'] === $selectedChildId) {
-        $currentChild = $c;
-        break;
-    }
+// Load hospitals currently stocking this vaccine
+$stockingHospitals = [];
+if ($dose && !$eligibilityError) {
+    $stockingHospitals = shared_get_hospitals_stocking_vaccine((int)$dose['vaccine_id']);
 }
 
-// 2. Fetch all hospitals for hospital dropdown
-$hospitals = shared_search_hospitals('');
-$selectedHospitalId = (int)($_POST['hospital_id'] ?? $_GET['hospital_id'] ?? $_GET['hospital'] ?? 0);
-
-// 3. Fetch bookable vaccines for the selected child (SHARED TABLE: vaccines, bookings)
-$bookableVaccines = [];
-if ($currentChild) {
-    $bookableVaccines = shared_get_bookable_vaccines_for_child($currentChild['id']);
-}
-$selectedVaccineId = (int)($_POST['vaccine_id'] ?? $_GET['vaccine_id'] ?? $_GET['vaccine'] ?? 0);
-
-// 4. Handle POST form submission
+// Handle Form Submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $formChildId = (int)($_POST['child_id'] ?? 0);
-    $formVaccineId = (int)($_POST['vaccine_id'] ?? 0);
-    $formHospitalId = (int)($_POST['hospital_id'] ?? 0);
-    $formDate = trim($_POST['booking_date'] ?? '');
-    $formTime = trim($_POST['booking_time'] ?? '');
-    $formTime = ($formTime !== '') ? $formTime : null;
-
-    // Validate ownership: Child MUST belong to the logged-in parent
-    $verifyChild = db()->prepare("SELECT id, full_name, dob FROM children WHERE id = ? AND parent_id = ?");
-    $verifyChild->execute([$formChildId, $parentId]);
-    $verifiedChild = $verifyChild->fetch();
-
-    // Validate hospital existence (SHARED TABLE: hospitals)
-    $verifiedHospital = shared_get_hospital_by_id($formHospitalId);
-
-    // Validate appointment date format (YYYY-MM-DD) and ensure date is not in the past
-    $today = date('Y-m-d');
-    $isValidDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', $formDate) && ($formDate >= $today);
-
-    // Initial basic validations
-    if (!$verifiedChild) {
-        flash('error', 'Security error: Invalid child selected.');
-    } elseif (!$verifiedHospital) {
-        flash('error', 'Please select a valid hospital from the directory.');
-    } elseif (!$isValidDate) {
-        flash('error', 'Appointment date must be today or a future date.');
+    if ($eligibilityError) {
+        flash('error', $eligibilityError);
     } else {
-        // Task 4: Server-side check that vaccine is in child's bookable list
-        $childBookableList = shared_get_bookable_vaccines_for_child($formChildId);
-        $matchedBookableVaccine = null;
+        $hospitalId      = (int)($_POST['hospital_id'] ?? 0);
+        $appointmentDate = trim($_POST['appointment_date'] ?? '');
+        $appointmentTime = trim($_POST['appointment_time'] ?? '');
+        $parentNote      = trim($_POST['parent_note'] ?? '') ?: null;
 
-        foreach ($childBookableList as $item) {
-            if ((int)$item['id'] === $formVaccineId) {
-                $matchedBookableVaccine = $item;
+        if (strlen($appointmentTime) === 5) {
+            $appointmentTime .= ':00';
+        }
+
+        // Validate selected hospital
+        $hospitalValid = false;
+        $chosenHospital = null;
+        foreach ($stockingHospitals as $h) {
+            if ((int)$h['hospital_id'] === $hospitalId) {
+                $hospitalValid = true;
+                $chosenHospital = $h;
                 break;
             }
         }
 
-        if (!$matchedBookableVaccine) {
-            flash('error', 'The selected vaccine is not currently eligible for booking for this child.');
+        $today = date('Y-m-d');
+        if ($hospitalId <= 0 || !$hospitalValid) {
+            flash('error', 'Please select an authorized hospital facility with confirmed vaccine stock.');
+        } elseif ($appointmentDate === '' || $appointmentDate < $today) {
+            flash('error', 'Appointment date cannot be in the past. Please select today or a future date.');
+        } elseif (!preg_match('/^\d{2}:\d{2}:\d{2}$/', $appointmentTime)) {
+            flash('error', 'Please specify a valid appointment time.');
+        } elseif ($parentNote !== null && mb_strlen($parentNote) > 255) {
+            flash('error', 'Special instructions or notes cannot exceed 255 characters.');
         } else {
-            // Task 4: Reject doses whose scheduled due date is more than 30 days in the future
-            // due = dob + due_after_days
-            $daysOffset = (int)$matchedBookableVaccine['due_after_days'];
-            $calculatedDueDate = date('Y-m-d', strtotime($verifiedChild['dob'] . " + $daysOffset days"));
-            $maxAllowedDueDate = date('Y-m-d', strtotime('+30 days'));
+            // Book appointment calling official stored procedure
+            $res = shared_book_appointment(
+                (int)$dose['child_vaccination_id'],
+                $hospitalId,
+                $appointmentDate,
+                $appointmentTime,
+                $parentNote
+            );
 
-            if ($calculatedDueDate > $maxAllowedDueDate) {
-                flash('error', 'This vaccine dose is scheduled for ' . $calculatedDueDate . ', which is more than 30 days away. You can only book vaccinations that are overdue or due within the next 30 days.');
+            if ($res['success']) {
+                flash('success', $res['message']);
+                redirect('parent/bookings.php');
             } else {
-                // Enforce duplicate check (SHARED TABLE: bookings)
-                $hasActiveBooking = shared_has_active_or_completed_booking($formChildId, $formVaccineId);
-
-                if ($hasActiveBooking) {
-                    flash('error', 'Booking rejected: This vaccine is already active (Pending/Approved) or completed (Vaccinated) for ' . $verifiedChild['full_name'] . '.');
-                } else {
-                    // Create new booking with status 'Pending' (SHARED TABLE: bookings)
-                    shared_create_booking($formChildId, $formVaccineId, $formHospitalId, $formDate, $formTime);
-                    flash('success', 'Appointment request submitted successfully! Your booking is currently Pending admin approval.');
-                    redirect('parent/bookings.php');
-                }
+                flash('error', $res['message']);
             }
         }
     }
-
-    // Preserve selections if validation fails
-    $selectedChildId = $formChildId;
-    $selectedVaccineId = $formVaccineId;
-    $selectedHospitalId = $formHospitalId;
 }
 
 require __DIR__ . '/../includes/header.php';
@@ -157,120 +122,122 @@ require __DIR__ . '/../includes/header.php';
 
 <div class="reveal">
   <h1>Book Vaccination Appointment</h1>
-  <p class="muted">Schedule an immunization slot at an accredited center. Bookings are confirmed upon admin approval.</p>
+  <p class="muted">Schedule a child immunization visit with an authorized healthcare center holding certified vaccine stock.</p>
 </div>
 
-<section class="card auth reveal" style="max-width:560px;">
-  <?php if (empty($children)): ?>
-    <div style="text-align:center; padding:20px 0;">
-      <p class="muted">You must register at least one child before booking an appointment.</p>
-      <a class="btn" href="children.php">Register a Child</a>
-    </div>
-  <?php elseif (empty($hospitals)): ?>
-    <div style="text-align:center; padding:20px 0;">
-      <p class="muted">No hospitals are currently registered in the system. Please check back later.</p>
-    </div>
-  <?php else: ?>
+<?php if (empty($bookableDoses) && !$dose): ?>
+  <div class="card reveal" style="text-align:center; padding:36px 20px;">
+    <h3>No Vaccines Currently Due for Booking</h3>
+    <p class="muted" style="max-width:540px; margin:10px auto 20px auto;">
+      None of your active children have vaccination doses due within the next 30 days. Doses become bookable 30 days prior to their due date.
+    </p>
+    <a class="btn" href="schedule.php">View Immunization Schedules</a>
+  </div>
+<?php else: ?>
 
-    <form method="post" action="book.php" class="form">
-      <?= csrf_field() ?>
-      <?php if ($cvId > 0): ?>
-        <input type="hidden" name="child_vaccination_id" value="<?= (int)$cvId ?>">
+  <?php if ($eligibilityError): ?>
+    <div class="alert alert-error reveal" style="margin-bottom:20px;">
+      <strong>Eligibility Notice:</strong> <?= e($eligibilityError) ?>
+    </div>
+  <?php endif; ?>
+
+  <div class="grid2">
+    <!-- Left Column: Dose Summary & Dose Selector -->
+    <section class="card reveal">
+      <h2>1. Selected Vaccination Dose</h2>
+
+      <?php if (count($bookableDoses) > 1): ?>
+        <form method="get" action="book.php" style="margin-bottom:20px;">
+          <label>
+            Select Child &amp; Due Dose:
+            <select name="child_vaccination_id" onchange="this.form.submit()">
+              <?php foreach ($bookableDoses as $bd): ?>
+                <option value="<?= (int)$bd['child_vaccination_id'] ?>" <?= ((int)$bd['child_vaccination_id'] === $cvId) ? 'selected' : '' ?>>
+                  <?= e($bd['child_name']) ?> — <?= e($bd['vaccine_name']) ?> (Dose <?= (int)$bd['dose_number'] ?>) [Due: <?= date('d-M-Y', strtotime($bd['due_date'])) ?>]
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+        </form>
       <?php endif; ?>
 
-      <!-- 1. Select Child (Restricted to logged-in parent) -->
-      <label>
-        Child:
-        <select name="child_id" id="book_child_id" required onchange="window.location.href='book.php?child_id=' + this.value + '&hospital_id=<?= $selectedHospitalId ?>';">
-          <?php foreach ($children as $c): ?>
-            <option value="<?= (int)$c['id'] ?>" <?= ((int)$c['id'] === $selectedChildId) ? 'selected' : '' ?>>
-              <?= e($c['full_name']) ?> (<?= e($c['gender']) ?>, <?= e(age_text($c['dob'])) ?>)
-            </option>
-          <?php endforeach; ?>
-        </select>
-      </label>
+      <?php if ($dose): ?>
+        <div style="background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:16px;">
+          <h3 style="margin-top:0; color:var(--primary);"><?= e($dose['vaccine_name']) ?> (Dose <?= (int)$dose['dose_number'] ?>)</h3>
+          <p style="margin:4px 0;"><strong>Child:</strong> <?= e($dose['child_name']) ?> (DOB: <?= date('d-M-Y', strtotime($dose['date_of_birth'])) ?>, <?= ucfirst($dose['gender']) ?>)</p>
+          <p style="margin:4px 0;"><strong>Protects Against:</strong> <?= e($dose['disease_prevented']) ?></p>
+          <p style="margin:4px 0;"><strong>Scheduled Due Date:</strong> <?= date('d-M-Y', strtotime($dose['due_date'])) ?></p>
+          <p style="margin:4px 0;">
+            <strong>Status:</strong> 
+            <span class="badge badge-<?= $dose['status'] === 'missed' ? 'danger' : 'warning' ?>">
+              <?= ucfirst($dose['status']) ?>
+            </span>
+          </p>
+        </div>
+      <?php endif; ?>
 
-      <!-- 2. Select Vaccine (Available vaccines in child's schedule not yet completed/booked) -->
-      <label>
-        Vaccine:
-        <?php if (empty($bookableVaccines)): ?>
-          <select disabled>
-            <option>All scheduled vaccines are already booked or completed for this child.</option>
-          </select>
-          <span class="muted" style="font-size:0.85rem; color:var(--warn);">
-            No pending doses found for this child's schedule. Check <a href="schedule.php?child_id=<?= $selectedChildId ?>">Child Schedule</a>.
-          </span>
-        <?php else: ?>
-          <select name="vaccine_id" required>
-            <option value="">-- Choose Vaccine --</option>
-            <?php foreach ($bookableVaccines as $bv): ?>
-              <?php 
-                // Calculate due date for display
-                $dOffset = (int)$bv['due_after_days'];
-                $itemDue = date('Y-m-d', strtotime($currentChild['dob'] . " + $dOffset days"));
-                $isFarFuture = ($itemDue > date('Y-m-d', strtotime('+30 days')));
-              ?>
-              <option value="<?= (int)$bv['id'] ?>" <?= ((int)$bv['id'] === $selectedVaccineId) ? 'selected' : '' ?>>
-                <?= e($bv['name']) ?> &middot; Due: <?= e($itemDue) ?> <?= $isFarFuture ? '(>30 days away)' : '' ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
-        <?php endif; ?>
-      </label>
-
-      <!-- 3. Select Hospital -->
-      <label>
-        Hospital / Vaccination Center:
-        <select name="hospital_id" required>
-          <option value="">-- Choose Hospital --</option>
-          <?php foreach ($hospitals as $h): ?>
-            <option value="<?= (int)$h['id'] ?>" <?= ((int)$h['id'] === $selectedHospitalId) ? 'selected' : '' ?>>
-              <?= e($h['name']) ?> (<?= e($h['location']) ?>)
-            </option>
-          <?php endforeach; ?>
-        </select>
-      </label>
-
-      <!-- 4. Preferred Date -->
-      <label>
-        Preferred Date:
-        <input 
-          type="date" 
-          name="booking_date" 
-          id="booking_date" 
-          min="<?= date('Y-m-d') ?>" 
-          value="<?= e($_POST['booking_date'] ?? date('Y-m-d')) ?>" 
-          required
-        >
-      </label>
-
-      <!-- 5. Preferred Time (Optional slot preference) -->
-      <label>
-        Preferred Time Slot (Optional):
-        <input 
-          type="time" 
-          name="booking_time" 
-          value="<?= e($_POST['booking_time'] ?? '') ?>"
-        >
-      </label>
-
-      <div style="margin-top:8px;">
-        <button 
-          type="submit" 
-          class="btn" 
-          style="width:100%;" 
-          <?= empty($bookableVaccines) ? 'disabled style="opacity:0.6; cursor:not-allowed;"' : '' ?>
-        >
-          Confirm &amp; Request Booking
-        </button>
+      <div style="margin-top:20px;">
+        <h4>Eligibility Guidelines</h4>
+        <ul class="muted" style="font-size:0.9rem; line-height:1.6; padding-left:20px;">
+          <li>Appointments can be requested for doses marked <strong>Upcoming</strong> or <strong>Missed</strong>.</li>
+          <li>System rules open booking <strong>30 days before</strong> the child's scheduled due date.</li>
+          <li>Appointments must be confirmed by the healthcare center administrator.</li>
+        </ul>
       </div>
+    </section>
 
-      <p class="muted" style="font-size:0.85rem; text-align:center; margin-top:12px;">
-        Note: The booking will be marked as <strong>Pending</strong> until confirmed by healthcare administrators.
-      </p>
-    </form>
+    <!-- Right Column: Booking Form -->
+    <section class="card reveal">
+      <h2>2. Appointment Details</h2>
 
-  <?php endif; ?>
-</section>
+      <?php if ($eligibilityError): ?>
+        <p class="muted">Please select an eligible dose from the schedule to proceed with appointment booking.</p>
+        <a class="btn" href="schedule.php">Return to Schedule</a>
+      <?php elseif (empty($stockingHospitals)): ?>
+        <div style="background:#fff3cd; color:#856404; padding:16px; border-radius:8px; border:1px solid #ffeeba;">
+          <strong>Out of Stock:</strong> No certified hospitals currently have <em><?= e($dose['vaccine_name'] ?? 'this vaccine') ?></em> available in stock. Hospital staff frequently update inventory; please check back shortly.
+        </div>
+      <?php else: ?>
+        <form method="post" action="book.php" class="form">
+          <?= csrf_field() ?>
+          <input type="hidden" name="child_vaccination_id" value="<?= (int)$dose['child_vaccination_id'] ?>">
+
+          <label>
+            Healthcare Facility / Hospital (Stock Confirmed):
+            <select name="hospital_id" required>
+              <option value="">-- Choose an authorized hospital --</option>
+              <?php foreach ($stockingHospitals as $h): ?>
+                <option value="<?= (int)$h['hospital_id'] ?>" <?= ($selectedHospitalId === (int)$h['hospital_id']) ? 'selected' : '' ?>>
+                  <?= e($h['hospital_name']) ?> — <?= e($h['city']) ?> (Hours: <?= substr($h['opening_time'], 0, 5) ?> - <?= substr($h['closing_time'], 0, 5) ?>, <?= (int)$h['stock_quantity'] ?> doses in stock)
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+
+          <div class="grid2">
+            <label>
+              Preferred Appointment Date:
+              <input type="date" name="appointment_date" min="<?= date('Y-m-d') ?>" required value="<?= e($_POST['appointment_date'] ?? date('Y-m-d')) ?>">
+            </label>
+            <label>
+              Preferred Time:
+              <input type="time" name="appointment_time" required value="<?= e($_POST['appointment_time'] ?? '10:00') ?>">
+            </label>
+          </div>
+
+          <label>
+            Parent Notes / Special Requests (optional, max 255 chars):
+            <textarea name="parent_note" rows="3" maxlength="255" placeholder="Mention any recent fever, specific doctor requests, or accessibility needs..."><?= e($_POST['parent_note'] ?? '') ?></textarea>
+          </label>
+
+          <div style="margin-top:12px;">
+            <button type="submit" class="btn" style="width:100%;">Confirm Appointment Request</button>
+          </div>
+        </form>
+      <?php endif; ?>
+    </section>
+  </div>
+
+<?php endif; ?>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>

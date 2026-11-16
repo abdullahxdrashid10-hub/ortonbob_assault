@@ -38,8 +38,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $city     = trim($_POST['city'] ?? '');
         $cnic     = trim($_POST['cnic'] ?? '') ?: null;
 
-        if ($fullName === '' || $phone === '') {
-            flash('error', 'Full Name and Phone Number are required fields.');
+        // Task F4: Specific server-side validation matching database schema column constraints
+        if ($fullName === '' || mb_strlen($fullName) > 120) {
+            flash('error', 'Full Name is required and cannot exceed 120 characters.');
+        } elseif ($phone === '' || mb_strlen($phone) > 20) {
+            flash('error', 'Phone number is required and cannot exceed 20 characters.');
+        } elseif ($address !== '' && mb_strlen($address) > 255) {
+            flash('error', 'Address cannot exceed 255 characters.');
+        } elseif ($city !== '' && mb_strlen($city) > 80) {
+            flash('error', 'City cannot exceed 80 characters.');
+        } elseif ($cnic !== null && mb_strlen($cnic) > 20) {
+            flash('error', 'CNIC cannot exceed 20 characters.');
         } else {
             try {
                 shared_update_parent_profile(
@@ -74,8 +83,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Verify that current password matches stored password_hash
         if (!password_verify($currentPassword, $profile['password_hash'])) {
             flash('error', 'Verification failed: Your current password was incorrect.');
-        } elseif (strlen($newPassword) < 6) {
-            flash('error', 'New password must be at least 6 characters in length.');
+        } elseif (strlen($newPassword) < 6 || strlen($newPassword) > 72) {
+            flash('error', 'New password must be between 6 and 72 characters.');
         } elseif ($newPassword !== $confirmPassword) {
             flash('error', 'New password and confirmation password do not match.');
         } else {

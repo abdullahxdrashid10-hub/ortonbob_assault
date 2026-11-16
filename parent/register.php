@@ -30,13 +30,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password   = $_POST['password'] ?? '';
     $confirm    = $_POST['confirm_password'] ?? '';
 
-    // Validation checks
-    if ($fullName === '' || $email === '' || $phone === '') {
-        flash('error', 'Full Name, Email address, and Phone number are required.');
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        flash('error', 'Please enter a valid email address.');
-    } elseif (strlen($password) < 6) {
-        flash('error', 'Password must be at least 6 characters in length.');
+    // Task F4: Specific server-side validation matching database schema column constraints
+    if ($fullName === '' || mb_strlen($fullName) > 120) {
+        flash('error', 'Full Name is required and cannot exceed 120 characters.');
+    } elseif ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($email) > 150) {
+        flash('error', 'A valid email address is required and cannot exceed 150 characters.');
+    } elseif ($phone === '' || mb_strlen($phone) > 20) {
+        flash('error', 'Phone number is required and cannot exceed 20 characters.');
+    } elseif ($address !== '' && mb_strlen($address) > 255) {
+        flash('error', 'Address cannot exceed 255 characters.');
+    } elseif ($city !== '' && mb_strlen($city) > 80) {
+        flash('error', 'City cannot exceed 80 characters.');
+    } elseif ($cnic !== null && mb_strlen($cnic) > 20) {
+        flash('error', 'CNIC cannot exceed 20 characters.');
+    } elseif (strlen($password) < 6 || strlen($password) > 72) {
+        flash('error', 'Password must be between 6 and 72 characters.');
     } elseif ($password !== $confirm) {
         flash('error', 'Password and confirmation password do not match.');
     } else {

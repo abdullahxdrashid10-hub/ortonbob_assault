@@ -18,7 +18,7 @@ This guide describes how to import and configure the team's database (`vaccinati
 6. Under **File to import**, click **Choose File** and select:
    `sql/official_schema.sql` (located in this project repository)
 7. Ensure format is set to **SQL** and click **Import** (or **Go**) at the bottom.
-8. Verify that all 11 tables, 6 views, 6 stored procedures, and the `trg_children_after_insert` trigger have imported successfully.
+8. Verify that all 14 base tables, 6 views, 6 stored procedures, and the `trg_children_after_insert` trigger have imported successfully.
 
 ---
 

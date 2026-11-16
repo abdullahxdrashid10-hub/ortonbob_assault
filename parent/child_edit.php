@@ -42,15 +42,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $weightKg = ($weightRaw !== '' && is_numeric($weightRaw)) ? (float)$weightRaw : null;
 
-    if ($fullName === '') {
-        flash('error', 'Please enter the child\'s full name.');
+    // Task F3: Server-side validation matching database schema column constraints
+    if ($fullName === '' || mb_strlen($fullName) > 120) {
+        flash('error', 'Child full name is required and cannot exceed 120 characters.');
     } elseif (!in_array($gender, $validGenders, true)) {
         flash('error', 'Please select a valid gender option.');
     } elseif (!in_array($bloodGroup, $validBloodGroups, true)) {
         flash('error', 'Please select a valid blood group option.');
+    } elseif ($weightRaw !== '' && (!is_numeric($weightRaw) || (float)$weightRaw < 0.30 || (float)$weightRaw > 9.99)) {
+        flash('error', 'Birth weight must be a valid number between 0.30 kg and 9.99 kg.');
+    } elseif ($certNo !== null && mb_strlen($certNo) > 60) {
+        flash('error', 'Birth certificate number cannot exceed 60 characters.');
+    } elseif ($allergies !== null && mb_strlen($allergies) > 255) {
+        flash('error', 'Allergies description cannot exceed 255 characters.');
+    } elseif ($notes !== null && mb_strlen($notes) > 1000) {
+        flash('error', 'Medical notes cannot exceed 1000 characters.');
     } else {
         // Date of birth is read-only and preserved permanently to prevent stale schedule doses
-        shared_update_child(
+        $updated = shared_update_child(
             $childId,
             $parentId,
             $fullName,
@@ -62,8 +71,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $notes
         );
 
-        flash('success', 'Child profile updated successfully.');
-        redirect('parent/children.php');
+        if ($updated) {
+            flash('success', 'Child profile updated successfully.');
+            redirect('parent/children.php');
+        } else {
+            flash('error', 'Failed to update child profile. Please check the details and try again.');
+        }
     }
 }
 

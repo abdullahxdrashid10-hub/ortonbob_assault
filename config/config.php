@@ -1,8 +1,41 @@
 <?php
 /**
- * config.php - Global configuration, database connection (PDO) and helper functions.
+ * config.php - Global configuration, error logging, DB connection, and helper functions.
  * Adapts to the team's official vaccination_db schema.
  */
+
+// ---- Task F1: Error handling & logging configuration ----
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+$logDir = dirname(__DIR__) . '/logs';
+if (!is_dir($logDir)) {
+    @mkdir($logDir, 0777, true);
+}
+ini_set('error_log', $logDir . '/php-error.log');
+
+// Global exception handler displaying a friendly error page while logging technical details
+set_exception_handler(function (Throwable $e) {
+    error_log(sprintf(
+        "[%s] Uncaught Exception: %s in %s:%d\nStack trace:\n%s",
+        date('Y-m-d H:i:s'),
+        $e->getMessage(),
+        $e->getFile(),
+        $e->getLine(),
+        $e->getTraceAsString()
+    ));
+
+    if (!headers_sent()) {
+        http_response_code(500);
+    }
+
+    echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>System Error | VaxCare</title>';
+    echo '<style>body{background:#0b1020;color:#e8ecf8;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}';
+    echo '.box{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:32px;max-width:480px;text-align:center;}';
+    echo 'h1{color:#ef4444;margin-top:0;}p{color:#9aa6c7;line-height:1.6;}a{color:#38bdf8;text-decoration:none;font-weight:600;}</style></head>';
+    echo '<body><div class="box"><h1>Something went wrong</h1><p>An unexpected error occurred while processing your request. Our technical staff has been notified. Please try again shortly.</p>';
+    echo '<p><a href="' . (defined('BASE_URL') ? BASE_URL : '') . '/index.php">&larr; Return to Home</a></p></div></body></html>';
+    exit;
+});
 
 // ---- Database settings (XAMPP defaults) ----
 const DB_HOST = 'localhost';
@@ -69,6 +102,7 @@ function db(): PDO
                 ]
             );
         } catch (PDOException $e) {
+            error_log('Database connection error: ' . $e->getMessage());
             die('Database connection failed. Is MySQL running and sql/official_schema.sql imported?');
         }
     }
