@@ -51,7 +51,7 @@ require __DIR__ . '/../includes/header.php';
 
 <div class="reveal">
   <h1>Vaccination Schedule</h1>
-  <p class="muted">Age-specific immunization schedule generated from the national pediatric guidelines.</p>
+  <p class="muted">Sample immunization schedule (from the system's vaccine schedule table)</p>
 </div>
 
 <?php if (empty($children)): ?>
@@ -113,7 +113,10 @@ require __DIR__ . '/../includes/header.php';
             <?php foreach ($scheduleItems as $dose): ?>
               <?php 
                 $st = strtolower($dose['status']); 
-                $canBook = ($st === CV_UPCOMING || $st === CV_MISSED);
+                $maxBookingDate = date('Y-m-d', strtotime('+30 days'));
+                $isDueSoonOrOverdue = ($dose['due_date'] <= $maxBookingDate);
+                $isEligibleStatus   = ($st === CV_UPCOMING || $st === CV_MISSED);
+                $canBook            = ($isEligibleStatus && $isDueSoonOrOverdue);
               ?>
               <tr>
                 <td><strong>Dose <?= (int)$dose['dose_number'] ?></strong></td>
@@ -136,10 +139,12 @@ require __DIR__ . '/../includes/header.php';
                 <td><?= badge($st) ?></td>
                 <td>
                   <?php if ($canBook): ?>
-                    <!-- Task D: Book link passing child_vaccination_id (booking page in 3B) -->
+                    <!-- Task 0e: Book link passing child_vaccination_id when status is upcoming/missed and due <= 30 days -->
                     <a class="btn btn-sm" href="book.php?child_vaccination_id=<?= (int)$dose['child_vaccination_id'] ?>">
                       Book
                     </a>
+                  <?php elseif ($isEligibleStatus && !$isDueSoonOrOverdue): ?>
+                    <span class="muted" style="font-size:0.85rem;">Not yet due</span>
                   <?php elseif ($st === CV_BOOKED || $st === CV_REQUESTED): ?>
                     <span class="badge b-approved">Active</span>
                   <?php elseif ($st === CV_COMPLETED): ?>

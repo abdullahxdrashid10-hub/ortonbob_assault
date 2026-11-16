@@ -32,9 +32,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Action 1: Soft-Delete a Child Profile
     if ($action === 'delete') {
         $childId = (int)($_POST['id'] ?? 0);
-        $deleted = shared_soft_delete_child($childId, $parentId);
+        $result  = shared_soft_delete_child($childId, $parentId);
 
-        if ($deleted) {
+        // Guard: check if child has active appointments ('requested' or 'booked')
+        if ($result === 'active_appointment') {
+            flash('error', 'This child has an active appointment. It must be completed or rejected first.');
+        } elseif ($result === true) {
             flash('success', 'Child profile removed from active records.');
         } else {
             flash('error', 'Child record could not be removed or unauthorized.');
@@ -52,13 +55,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $notes      = trim($_POST['medical_notes'] ?? '') ?: null;
 
         $weightKg = ($weightRaw !== '' && is_numeric($weightRaw)) ? (float)$weightRaw : null;
-        $isValidDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob) && ($dob <= date('Y-m-d'));
+
+        // Task 0c: DOB validation using checkdate(), not in future, and not older than 13 years
+        $isValidDate = false;
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $dob, $m)) {
+            $year  = (int)$m[1];
+            $month = (int)$m[2];
+            $day   = (int)$m[3];
+            if (checkdate($month, $day, $year)) {
+                $today = date('Y-m-d');
+                $minDate = date('Y-m-d', strtotime('-13 years'));
+                if ($dob <= $today && $dob >= $minDate) {
+                    $isValidDate = true;
+                }
+            }
+        }
 
         // Input validation
         if ($fullName === '') {
             flash('error', 'Please enter the child\'s full name.');
         } elseif (!$isValidDate) {
-            flash('error', 'Date of birth must be a valid date and cannot be in the future.');
+            flash('error', 'Date of birth must be a valid calendar date, not in the future, and child must not be older than 13 years.');
         } elseif (!in_array($gender, $validGenders, true)) {
             flash('error', 'Please select a valid gender option.');
         } elseif (!in_array($bloodGroup, $validBloodGroups, true)) {
@@ -83,7 +100,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($scheduleCount === 0) {
                 flash('error', 'Child was registered, but automatic vaccination schedule generation failed. Please contact system support.');
             } else {
-                flash('success', "Child profile for " . e($fullName) . " added successfully! $scheduleCount scheduled vaccination doses generated.");
+                // Task 0b: Do not call e() on text passed to flash() - header already escapes it
+                flash('success', "Child profile for {$fullName} added successfully! $scheduleCount scheduled vaccination doses generated.");
             }
         }
     }
@@ -115,7 +133,7 @@ require __DIR__ . '/../includes/header.php';
 
       <label>
         Date of Birth:
-        <input type="date" name="date_of_birth" max="<?= date('Y-m-d') ?>" required value="<?= e($_POST['date_of_birth'] ?? '') ?>">
+        <input type="date" name="date_of_birth" min="<?= date('Y-m-d', strtotime('-13 years')) ?>" max="<?= date('Y-m-d') ?>" required value="<?= e($_POST['date_of_birth'] ?? '') ?>">
       </label>
 
       <label>

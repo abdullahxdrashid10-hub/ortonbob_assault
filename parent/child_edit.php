@@ -33,7 +33,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
     $fullName   = trim($_POST['full_name'] ?? '');
-    $dob        = trim($_POST['date_of_birth'] ?? '');
     $gender     = strtolower(trim($_POST['gender'] ?? ''));
     $bloodGroup = trim($_POST['blood_group'] ?? 'unknown');
     $weightRaw  = trim($_POST['birth_weight_kg'] ?? '');
@@ -42,22 +41,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $notes      = trim($_POST['medical_notes'] ?? '') ?: null;
 
     $weightKg = ($weightRaw !== '' && is_numeric($weightRaw)) ? (float)$weightRaw : null;
-    $isValidDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob) && ($dob <= date('Y-m-d'));
 
     if ($fullName === '') {
         flash('error', 'Please enter the child\'s full name.');
-    } elseif (!$isValidDate) {
-        flash('error', 'Date of birth must be a valid date and cannot be in the future.');
     } elseif (!in_array($gender, $validGenders, true)) {
         flash('error', 'Please select a valid gender option.');
     } elseif (!in_array($bloodGroup, $validBloodGroups, true)) {
         flash('error', 'Please select a valid blood group option.');
     } else {
+        // Date of birth is read-only and preserved permanently to prevent stale schedule doses
         shared_update_child(
             $childId,
             $parentId,
             $fullName,
-            $dob,
             $gender,
             $bloodGroup,
             $weightKg,
@@ -87,8 +83,8 @@ require __DIR__ . '/../includes/header.php';
     </label>
 
     <label>
-      Date of Birth:
-      <input type="date" name="date_of_birth" max="<?= date('Y-m-d') ?>" required value="<?= e($_POST['date_of_birth'] ?? $child['date_of_birth']) ?>">
+      Date of Birth (Permanent, cannot be modified):
+      <input type="date" value="<?= e($child['date_of_birth']) ?>" readonly disabled style="opacity:0.75; cursor:not-allowed;">
     </label>
 
     <label>

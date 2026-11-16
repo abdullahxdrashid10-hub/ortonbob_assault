@@ -123,11 +123,12 @@ function shared_count_child_vaccination_rows(int $childId): int
 /**
  * Touches: children
  * Update an existing active child's profile details with parent ownership enforcement.
+ * Note: date_of_birth is NOT modifiable because the immunization schedule is generated
+ * once upon insertion; changing DOB would leave stale doses.
  * 
  * @param int $childId
  * @param int $parentId
  * @param string $fullName
- * @param string $dob
  * @param string $gender
  * @param string $bloodGroup
  * @param float|null $weightKg
@@ -140,7 +141,6 @@ function shared_update_child(
     int $childId,
     int $parentId,
     string $fullName,
-    string $dob,
     string $gender,
     string $bloodGroup,
     ?float $weightKg = null,
@@ -148,16 +148,15 @@ function shared_update_child(
     ?string $allergies = null,
     ?string $medicalNotes = null
 ): bool {
-    // Touches: children
+    // Touches: children (date_of_birth removed to prevent stale schedule doses)
     $sql = "UPDATE children
-            SET full_name = ?, date_of_birth = ?, gender = ?, blood_group = ?,
+            SET full_name = ?, gender = ?, blood_group = ?,
                 birth_weight_kg = ?, birth_certificate_no = ?, allergies = ?, medical_notes = ?
             WHERE child_id = ? AND parent_id = ? AND is_active = 1";
 
     $stmt = db()->prepare($sql);
     $stmt->execute([
         $fullName,
-        $dob,
         $gender,
         $bloodGroup,
         $weightKg,
@@ -172,21 +171,34 @@ function shared_update_child(
 }
 
 /**
- * Touches: children
+ * Touches: children, child_vaccinations
  * Soft-delete a child record by setting is_active = 0.
- * Mandatory rule: NEVER hard delete children as that cascades and erases records.
+ * Mandatory rule: Refuse if the child has any child_vaccinations with status 'requested' or 'booked'.
  * 
  * @param int $childId
  * @param int $parentId
- * @return bool
+ * @return string|bool Returns 'active_appointment' if active doses exist, true on success, false on failure.
  */
-function shared_soft_delete_child(int $childId, int $parentId): bool
+function shared_soft_delete_child(int $childId, int $parentId): string|bool
 {
-    // Touches: children
+    // Touches: child_vaccinations, children
+    // Guard: check if child has active appointments ('requested' or 'booked')
+    $chk = db()->prepare("
+        SELECT 1 FROM child_vaccinations cv
+        JOIN children c ON c.child_id = cv.child_id
+        WHERE cv.child_id = ? AND c.parent_id = ? AND cv.status IN ('requested', 'booked')
+        LIMIT 1
+    ");
+    $chk->execute([$childId, $parentId]);
+    if ($chk->fetch()) {
+        return 'active_appointment';
+    }
+
+    // Touches: children (perform soft delete)
     $sql = "UPDATE children SET is_active = 0 WHERE child_id = ? AND parent_id = ? AND is_active = 1";
     $stmt = db()->prepare($sql);
     $stmt->execute([$childId, $parentId]);
-    return $stmt->rowCount() > 0;
+    return $stmt->rowCount() > 0 ? true : false;
 }
 
 /**

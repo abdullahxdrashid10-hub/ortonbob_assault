@@ -22,6 +22,35 @@ require_once __DIR__ . '/../includes/shared_queries.php';
 require_parent();
 $parentId = (int)$_SESSION['parent_id'];
 
+// Check if child_vaccination_id was passed from schedule.php
+$cvId = (int)($_POST['child_vaccination_id'] ?? $_GET['child_vaccination_id'] ?? 0);
+$cvRecord = null;
+if ($cvId > 0) {
+    // Verify ownership and eligibility of the specific dose
+    $stmtCv = db()->prepare("
+        SELECT cv.*, c.parent_id, c.full_name AS child_name, c.date_of_birth
+        FROM child_vaccinations cv
+        JOIN children c ON c.child_id = cv.child_id
+        WHERE cv.child_vaccination_id = ? AND c.parent_id = ? AND c.is_active = 1
+    ");
+    $stmtCv->execute([$cvId, $parentId]);
+    $cvRecord = $stmtCv->fetch();
+
+    if ($cvRecord) {
+        $st = strtolower($cvRecord['status']);
+        $maxAllowedDueDate = date('Y-m-d', strtotime('+30 days'));
+
+        // Task 0e server-side rule: status must be upcoming or missed AND due_date <= today + 30 days
+        if (!in_array($st, [CV_UPCOMING, CV_MISSED], true) || $cvRecord['due_date'] > $maxAllowedDueDate) {
+            flash('error', 'This dose is not eligible for booking. Doses can only be booked if their status is upcoming or missed and due within the next 30 days.');
+            redirect('parent/schedule.php?child_id=' . (int)$cvRecord['child_id']);
+        }
+    } else {
+        flash('error', 'Invalid or unauthorized vaccination dose selected.');
+        redirect('parent/schedule.php');
+    }
+}
+
 // 1. Fetch only children belonging to this parent (OWNERSHIP CHECK)
 $stmtKids = db()->prepare("SELECT id, full_name, dob, gender FROM children WHERE parent_id = ? ORDER BY full_name ASC");
 $stmtKids->execute([$parentId]);
@@ -145,6 +174,9 @@ require __DIR__ . '/../includes/header.php';
 
     <form method="post" action="book.php" class="form">
       <?= csrf_field() ?>
+      <?php if ($cvId > 0): ?>
+        <input type="hidden" name="child_vaccination_id" value="<?= (int)$cvId ?>">
+      <?php endif; ?>
 
       <!-- 1. Select Child (Restricted to logged-in parent) -->
       <label>
