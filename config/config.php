@@ -4,6 +4,12 @@
  * Adapts to the team's official vaccination_db schema.
  */
 
+// ---- Timezone setting ----
+date_default_timezone_set('Asia/Karachi');
+
+// Feature flags
+const FEATURE_NOT_VACCINATED = false;
+
 // ---- Task F1: Error handling & logging configuration ----
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');

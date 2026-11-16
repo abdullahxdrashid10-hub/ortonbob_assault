@@ -41,8 +41,7 @@ $B = BASE_URL;
     </form>
   <?php elseif ($role === 'hospital' && !empty($_SESSION['hospital_id'])): ?>
     <a href="<?= $B ?>/hospital/appointments.php">Appointments</a>
-    <a href="<?= $B ?>/hospital/inventory.php">Inventory</a>
-    <a href="<?= $B ?>/hospital/profile.php">Profile</a>
+    <a href="<?= $B ?>/hospital/stock.php">Vaccine Stock</a>
     <span class="who" style="color:var(--primary); font-weight:600; padding:0 6px;"><?= e($_SESSION['hospital_name'] ?? '') ?></span>
     <form method="post" action="<?= $B ?>/hospital/logout.php" style="display:inline; margin:0;">
       <?= csrf_field() ?>

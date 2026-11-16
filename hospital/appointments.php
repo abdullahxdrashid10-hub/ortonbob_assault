@@ -1,12 +1,15 @@
 <?php
 /**
- * appointments.php - Hospital Appointments & Vaccination Administration
+ * appointments.php - Hospital Appointments Management & Administration
  * 
- * 3B Items 8 & 9: Built for the team's official schema:
- * - Lists appointments assigned to this hospital facility (filtered by approved, completed, all).
- * - Action: For approved appointments, hospital staff records vaccine administration by calling
- *   official stored procedure sp_complete_appointment() with batch_number, administered_by, and remarks.
- * - Enforces CSRF check and strict column length validation.
+ * 3B Item 8 & 9:
+ * - Lists appointments assigned to this hospital with tabs: Approved (to do) and Completed.
+ * - Displays child name, age, vaccine, dose number, parent name and phone, appointment date,
+ *   time, and parent note.
+ * - For Approved rows, provides a Complete form: batch_number (required), administered_by (required),
+ *   remarks. Pre-checks in PHP that the appointment belongs to MY hospital and is approved,
+ *   then calls sp_complete_appointment(appointment_id, session user_id, batch, administered_by, remarks).
+ * - "Not Vaccinated" is protected behind FEATURE_NOT_VACCINATED = false (stubbed in shared_queries.php).
  */
 
 $role = 'hospital';
@@ -31,8 +34,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $administeredBy = trim($_POST['administered_by'] ?? '');
         $remarks        = trim($_POST['remarks'] ?? '') ?: null;
 
-        if ($aptId <= 0) {
-            flash('error', 'Invalid appointment selected.');
+        // Requirement 8: Pre-check in PHP that the appointment belongs to MY hospital and is approved
+        $apt = shared_get_hospital_appointment_by_id($aptId, $hospitalId);
+
+        if (!$apt) {
+            flash('error', 'Appointment not found or does not belong to your healthcare facility.');
+        } elseif ($apt['status'] !== 'approved') {
+            flash('error', 'Only approved appointments can be completed.');
         } elseif ($batchNumber === '' || mb_strlen($batchNumber) > 60) {
             flash('error', 'Vaccine batch number is required and cannot exceed 60 characters.');
         } elseif ($administeredBy === '' || mb_strlen($administeredBy) > 120) {
@@ -56,12 +64,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         redirect('hospital/appointments.php?f=' . urlencode($_POST['current_filter'] ?? 'approved'));
+    } elseif ($action === 'not_vaccinated') {
+        // Requirement 9: Call stub function
+        try {
+            shared_hospital_mark_not_vaccinated((int)($_POST['appointment_id'] ?? 0), $hospitalId);
+        } catch (BadMethodCallException $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('hospital/appointments.php?f=approved');
     }
 }
 
-// Active filter tab
-$filter = $_GET['f'] ?? 'approved';
-if (!in_array($filter, ['approved', 'completed', 'all'], true)) {
+// Active tab filter: Approved (to do) or Completed
+$filter = strtolower(trim($_GET['f'] ?? 'approved'));
+if (!in_array($filter, ['approved', 'completed'], true)) {
     $filter = 'approved';
 }
 
@@ -78,32 +94,26 @@ require __DIR__ . '/../includes/header.php';
       <p class="muted">Manage scheduled patient visits and record clinical vaccine administration.</p>
     </div>
     <div>
-      <a href="inventory.php" class="btn btn-sm btn-ghost">&#128230; Manage Vaccine Stock</a>
+      <a href="stock.php" class="btn btn-sm btn-ghost">&#128230; Vaccine Stock</a>
     </div>
   </div>
 </div>
 
-<!-- Filter Tabs -->
+<!-- Tabs: Approved (to do) and Completed -->
 <div class="tabs reveal">
-  <?php 
-    $tabs = [
-      'approved'  => 'Approved (Pending Visit)',
-      'completed' => 'Completed (Administered)',
-      'all'       => 'All Appointments'
-    ];
-    foreach ($tabs as $k => $label): 
-  ?>
-    <a class="tab <?= $filter === $k ? 'active' : '' ?>" href="?f=<?= urlencode($k) ?>">
-      <?= $label ?>
-    </a>
-  <?php endforeach; ?>
+  <a class="tab <?= $filter === 'approved' ? 'active' : '' ?>" href="?f=approved">
+    Approved (To Do)
+  </a>
+  <a class="tab <?= $filter === 'completed' ? 'active' : '' ?>" href="?f=completed">
+    Completed
+  </a>
 </div>
 
 <!-- Appointments Table Card -->
 <section class="card reveal">
   <?php if (empty($appointments)): ?>
     <div style="text-align:center; padding:36px 12px;">
-      <p class="muted">No appointments found under "<?= e($tabs[$filter] ?? $filter) ?>".</p>
+      <p class="muted">No appointments found under "<?= ucfirst($filter) ?>".</p>
     </div>
   <?php else: ?>
     <div class="scroll">
@@ -111,12 +121,14 @@ require __DIR__ . '/../includes/header.php';
         <thead>
           <tr>
             <th>Appt #</th>
-            <th>Scheduled Visit</th>
-            <th>Child Info</th>
+            <th>Date &amp; Time</th>
+            <th>Child Name</th>
+            <th>Age</th>
             <th>Vaccine &amp; Dose</th>
             <th>Parent Contact</th>
+            <th>Parent Note</th>
             <th>Status</th>
-            <th>Action / Details</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
@@ -130,6 +142,18 @@ require __DIR__ . '/../includes/header.php';
                   'cancelled' => 'badge-muted',
                   default     => 'badge-warning',
               };
+
+              // Compute age human-readably
+              $dob = new DateTime($a['date_of_birth']);
+              $now = new DateTime();
+              $diff = $now->diff($dob);
+              if ($diff->y > 0) {
+                  $ageStr = $diff->y . ' yr' . ($diff->y > 1 ? 's' : '') . ($diff->m > 0 ? ', ' . $diff->m . ' mo' : '');
+              } elseif ($diff->m > 0) {
+                  $ageStr = $diff->m . ' month' . ($diff->m > 1 ? 's' : '');
+              } else {
+                  $ageStr = $diff->d . ' day' . ($diff->d > 1 ? 's' : '');
+              }
             ?>
             <tr>
               <td><strong>#<?= (int)$a['appointment_id'] ?></strong></td>
@@ -142,7 +166,7 @@ require __DIR__ . '/../includes/header.php';
               <td>
                 <strong><?= e($a['child_name']) ?></strong>
                 <span class="muted" style="display:block; font-size:0.8rem;">
-                  DOB: <?= date('d-M-Y', strtotime($a['date_of_birth'])) ?> (<?= ucfirst($a['gender']) ?>)
+                  (<?= ucfirst($a['gender']) ?>, <?= e($a['blood_group'] ?? 'unknown') ?>)
                 </span>
                 <?php if (!empty($a['allergies'])): ?>
                   <span class="badge badge-danger" style="font-size:0.75rem; margin-top:2px;">
@@ -150,6 +174,7 @@ require __DIR__ . '/../includes/header.php';
                   </span>
                 <?php endif; ?>
               </td>
+              <td><?= e($ageStr) ?></td>
               <td>
                 <strong><?= e($a['vaccine_name']) ?></strong>
                 <span class="muted" style="display:block; font-size:0.85rem;">
@@ -162,6 +187,9 @@ require __DIR__ . '/../includes/header.php';
                   &#128222; <?= e($a['parent_phone']) ?>
                 </span>
               </td>
+              <td style="max-width:180px; font-size:0.85rem;">
+                <?= !empty($a['parent_note']) ? e($a['parent_note']) : '<span class="muted">—</span>' ?>
+              </td>
               <td>
                 <span class="badge <?= $badgeClass ?>">
                   <?= ucfirst($status) ?>
@@ -169,12 +197,12 @@ require __DIR__ . '/../includes/header.php';
               </td>
               <td>
                 <?php if ($status === 'approved'): ?>
-                  <!-- Expandable Form to Record Administration -->
+                  <!-- Complete Form for Approved Rows -->
                   <details style="position:relative;">
                     <summary class="btn btn-sm" style="list-style:none; cursor:pointer;">
-                      &#128137; Administer
+                      &#128137; Complete
                     </summary>
-                    <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px; margin-top:8px; min-width:260px; box-shadow:0 4px 12px rgba(0,0,0,0.15);">
+                    <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px; margin-top:8px; min-width:270px; box-shadow:0 4px 12px rgba(0,0,0,0.15);">
                       <form method="post" action="appointments.php" class="form">
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="complete_appointment">
@@ -182,26 +210,36 @@ require __DIR__ . '/../includes/header.php';
                         <input type="hidden" name="current_filter" value="<?= e($filter) ?>">
 
                         <label style="font-size:0.85rem;">
-                          Batch Number:
+                          Batch Number (Required):
                           <input type="text" name="batch_number" required maxlength="60" placeholder="e.g. BATCH-2026-90" style="padding:6px; font-size:0.85rem;">
                         </label>
 
                         <label style="font-size:0.85rem; margin-top:6px;">
-                          Administered By:
+                          Administered By (Required):
                           <input type="text" name="administered_by" required maxlength="120" value="<?= e($_SESSION['hospital_name'] ?? 'Staff Nurse') ?>" style="padding:6px; font-size:0.85rem;">
                         </label>
 
                         <label style="font-size:0.85rem; margin-top:6px;">
-                          Clinical Remarks (optional):
+                          Clinical Remarks (Optional):
                           <input type="text" name="remarks" maxlength="255" placeholder="e.g. Well-tolerated, no adverse signs" style="padding:6px; font-size:0.85rem;">
                         </label>
 
                         <div style="margin-top:10px;">
-                          <button type="submit" class="btn btn-sm" style="width:100%;">Confirm Vaccination</button>
+                          <button type="submit" class="btn btn-sm" style="width:100%;">Record Completed Vaccination</button>
                         </div>
                       </form>
                     </div>
                   </details>
+
+                  <?php if (FEATURE_NOT_VACCINATED): ?>
+                    <form method="post" action="appointments.php" style="display:inline; margin-left:4px;">
+                      <?= csrf_field() ?>
+                      <input type="hidden" name="action" value="not_vaccinated">
+                      <input type="hidden" name="appointment_id" value="<?= (int)$a['appointment_id'] ?>">
+                      <button type="submit" class="btn btn-sm btn-ghost" style="color:var(--danger); border-color:var(--danger);">Not Vaccinated</button>
+                    </form>
+                  <?php endif; ?>
+
                 <?php elseif ($status === 'completed'): ?>
                   <span class="muted" style="font-size:0.85rem;">
                     Completed <?= !empty($a['completed_at']) ? date('d-M-Y', strtotime($a['completed_at'])) : '' ?>

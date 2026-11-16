@@ -586,6 +586,7 @@ function shared_get_parent_appointments(int $parentId): array
 }
 
 /**
+ * WRITES TO ADMIN-OWNED TABLES: confirm with the admin team
  * Touches: appointments, child_vaccinations, appointment_status_history
  * Cancel an appointment if it is currently 'pending'.
  * Resets child_vaccinations status back to 'upcoming' or 'missed' based on due_date.
@@ -790,17 +791,17 @@ function shared_register_hospital_facility(
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        // 1. Insert into users table
-        $stmtUser = $pdo->prepare("INSERT INTO users (email, password_hash, role, status) VALUES (?, ?, 'hospital', 'active')");
+        // 1. Insert into users table with status='inactive' awaiting admin approval
+        $stmtUser = $pdo->prepare("INSERT INTO users (email, password_hash, role, status) VALUES (?, ?, 'hospital', 'inactive')");
         $stmtUser->execute([$email, $passwordHash]);
         $userId = (int)$pdo->lastInsertId();
 
-        // 2. Insert into hospitals table
+        // 2. Insert into hospitals table with status='inactive'
         $stmtHosp = $pdo->prepare("
             INSERT INTO hospitals (
                 user_id, hospital_name, registration_no, address, city, area,
                 phone, email, opening_time, closing_time, daily_capacity, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'inactive')
         ");
         $stmtHosp->execute([
             $userId,
@@ -816,14 +817,6 @@ function shared_register_hospital_facility(
             $dailyCapacity
         ]);
         $hospitalId = (int)$pdo->lastInsertId();
-
-        // 3. Initialize default vaccine stock for this hospital from active vaccines
-        $stmtVac = $pdo->query("SELECT vaccine_id FROM vaccines WHERE is_active = 1");
-        $vacs = $stmtVac->fetchAll();
-        $insStock = $pdo->prepare("INSERT IGNORE INTO hospital_vaccine_stock (hospital_id, vaccine_id, status, quantity, updated_by) VALUES (?, ?, 'available', 50, ?)");
-        foreach ($vacs as $v) {
-            $insStock->execute([$hospitalId, (int)$v['vaccine_id'], $userId]);
-        }
 
         $pdo->commit();
         return $hospitalId;
@@ -960,6 +953,22 @@ function shared_complete_appointment(
 }
 
 /**
+ * Touches: appointments (STUB ONLY - DO NOT WRITE TO APPOINTMENTS DIRECTLY)
+ * Task 9: The official database currently has no stored procedure for marking an appointment
+ * as 'Not Vaccinated'. To maintain data integrity, activity history, and notification triggers,
+ * business logic must not write directly to appointments.
+ * 
+ * @param int $appointmentId
+ * @param int $hospitalId
+ * @throws BadMethodCallException
+ */
+function shared_hospital_mark_not_vaccinated(int $appointmentId, int $hospitalId): void
+{
+    // The DB has no stored procedure for 'Not Vaccinated' yet.
+    throw new BadMethodCallException('Marking as Not Vaccinated is not available yet (awaiting database stored procedure).');
+}
+
+/**
  * Touches: hospital_vaccine_stock, vaccines
  * Fetch inventory list of all vaccines and the hospital's stock level.
  * 
@@ -982,6 +991,21 @@ function shared_get_hospital_inventory(int $hospitalId): array
     $stmt = db()->prepare($sql);
     $stmt->execute([$hospitalId]);
     return $stmt->fetchAll();
+}
+
+/**
+ * Touches: vaccines
+ * Check if a vaccine ID exists and is currently active.
+ * 
+ * @param int $vaccineId
+ * @return bool
+ */
+function shared_is_vaccine_active(int $vaccineId): bool
+{
+    // Touches: vaccines
+    $stmt = db()->prepare("SELECT 1 FROM vaccines WHERE vaccine_id = ? AND is_active = 1");
+    $stmt->execute([$vaccineId]);
+    return (bool)$stmt->fetchColumn();
 }
 
 /**

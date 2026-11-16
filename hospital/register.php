@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $dailyCapacity
             );
 
-            flash('success', 'Hospital registered successfully! You may now log in to the hospital management portal.');
+            flash('success', 'Registration submitted. An administrator must approve your account before you can log in.');
             redirect('hospital/login.php');
         } catch (PDOException $e) {
             $msg = $e->getMessage();

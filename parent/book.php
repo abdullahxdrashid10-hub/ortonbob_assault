@@ -95,6 +95,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash('error', 'Appointment date cannot be in the past. Please select today or a future date.');
         } elseif (!preg_match('/^\d{2}:\d{2}:\d{2}$/', $appointmentTime)) {
             flash('error', 'Please specify a valid appointment time.');
+        } elseif ($appointmentTime < $chosenHospital['opening_time'] || $appointmentTime > $chosenHospital['closing_time']) {
+            // Task 3: Reject appointment_time outside hospital opening_time..closing_time with a clear message
+            flash('error', sprintf(
+                'Selected appointment time (%s) is outside %s operating hours (%s to %s).',
+                substr($appointmentTime, 0, 5),
+                $chosenHospital['hospital_name'],
+                substr($chosenHospital['opening_time'], 0, 5),
+                substr($chosenHospital['closing_time'], 0, 5)
+            ));
         } elseif ($parentNote !== null && mb_strlen($parentNote) > 255) {
             flash('error', 'Special instructions or notes cannot exceed 255 characters.');
         } else {

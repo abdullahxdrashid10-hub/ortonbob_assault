@@ -1,2 +1,4 @@
+/scratch/
 logs/*.log
 !logs/.gitkeep
+*.zip

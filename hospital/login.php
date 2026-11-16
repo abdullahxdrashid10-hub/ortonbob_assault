@@ -25,11 +25,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($email === '' || $password === '') {
         flash('error', 'Please enter your hospital email and password.');
-    } elseif (auth_login_hospital($email, $password)) {
-        flash('success', 'Welcome, ' . ($_SESSION['hospital_name'] ?? 'Healthcare Staff') . '!');
-        redirect('hospital/appointments.php');
     } else {
-        flash('error', 'Invalid email or password, or healthcare facility account is inactive.');
+        $loginError = '';
+        if (auth_login_hospital($email, $password, $loginError)) {
+            flash('success', 'Welcome, ' . ($_SESSION['hospital_name'] ?? 'Healthcare Staff') . '!');
+            redirect('hospital/appointments.php');
+        } else {
+            flash('error', $loginError ?: 'Invalid email or password.');
+        }
     }
 }
 
