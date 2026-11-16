@@ -491,6 +491,32 @@ function shared_get_hospital_available_vaccines(int $hospitalId): array
 // =====================================================================
 
 /**
+ * Touches: appointments
+ * Read-only helper returning active appointment counts per hospital on a given date
+ * for UI slot availability hints (capacity enforcement remains inside sp_book_appointment).
+ * 
+ * @param string $date (YYYY-MM-DD)
+ * @return array<int, int> Map of hospital_id => booked count
+ */
+function shared_get_hospital_booked_counts_for_date(string $date): array
+{
+    // Touches: appointments
+    $sql = "SELECT hospital_id, COUNT(*) AS booked_count
+            FROM appointments
+            WHERE appointment_date = ?
+              AND status IN ('pending', 'approved')
+            GROUP BY hospital_id";
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$date]);
+    $out = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $out[(int)$row['hospital_id']] = (int)$row['booked_count'];
+    }
+    return $out;
+}
+
+/**
  * Extract safe business error message when a stored procedure raises SQLSTATE 45000.
  * Returns a generic fallback for all other SQL errors to avoid leaking DB internals.
  * 

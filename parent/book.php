@@ -55,10 +55,16 @@ if ($cvId > 0 && !$dose) {
     }
 }
 
-// Load hospitals currently stocking this vaccine
+// Load hospitals currently stocking this vaccine + booked slot counts for selected date
+$selectedDate = trim($_POST['appointment_date'] ?? $_GET['date'] ?? date('Y-m-d'));
+if ($selectedDate < date('Y-m-d')) {
+    $selectedDate = date('Y-m-d');
+}
 $stockingHospitals = [];
+$bookedCountsByHospital = [];
 if ($dose && !$eligibilityError) {
     $stockingHospitals = shared_get_hospitals_stocking_vaccine((int)$dose['vaccine_id']);
+    $bookedCountsByHospital = shared_get_hospital_booked_counts_for_date($selectedDate);
 }
 
 // Handle Form Submission
@@ -207,30 +213,50 @@ require __DIR__ . '/../includes/header.php';
           <strong>Out of Stock:</strong> No certified hospitals currently have <em><?= e($dose['vaccine_name'] ?? 'this vaccine') ?></em> available in stock. Hospital staff frequently update inventory; please check back shortly.
         </div>
       <?php else: ?>
-        <form method="post" action="book.php" class="form">
+        <form method="post" action="book.php" class="form" id="booking-form">
           <?= csrf_field() ?>
           <input type="hidden" name="child_vaccination_id" value="<?= (int)$dose['child_vaccination_id'] ?>">
 
           <label>
             Healthcare Facility / Hospital (Stock Confirmed):
-            <select name="hospital_id" required>
+            <select name="hospital_id" id="hospital-select" required>
               <option value="">-- Choose an authorized hospital --</option>
               <?php foreach ($stockingHospitals as $h): ?>
-                <option value="<?= (int)$h['hospital_id'] ?>" <?= ($selectedHospitalId === (int)$h['hospital_id']) ? 'selected' : '' ?>>
-                  <?= e($h['hospital_name']) ?> — <?= e($h['city']) ?> (Hours: <?= substr($h['opening_time'], 0, 5) ?> - <?= substr($h['closing_time'], 0, 5) ?>, <?= (int)$h['stock_quantity'] ?> doses in stock)
+                <?php
+                  $hId     = (int)$h['hospital_id'];
+                  $openHm  = substr($h['opening_time'], 0, 5);
+                  $closeHm = substr($h['closing_time'], 0, 5);
+                  $cap     = (int)$h['daily_capacity'];
+                  $booked  = (int)($bookedCountsByHospital[$hId] ?? 0);
+                ?>
+                <option
+                  value="<?= $hId ?>"
+                  data-name="<?= e($h['hospital_name']) ?>"
+                  data-open="<?= e($openHm) ?>"
+                  data-close="<?= e($closeHm) ?>"
+                  data-cap="<?= $cap ?>"
+                  data-booked="<?= $booked ?>"
+                  <?= ($selectedHospitalId === $hId) ? 'selected' : '' ?>
+                >
+                  <?= e($h['hospital_name']) ?> — <?= e($h['city']) ?> (Hours: <?= $openHm ?> - <?= $closeHm ?>, <?= (int)$h['stock_quantity'] ?> doses in stock)
                 </option>
               <?php endforeach; ?>
             </select>
           </label>
 
+          <!-- Live hospital hours & slot capacity hint -->
+          <div id="slot-hint" class="muted" style="font-size:0.86rem; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,.03);">
+            Select a hospital to see operating hours and remaining slots for <?= e($selectedDate) ?>.
+          </div>
+
           <div class="grid2">
             <label>
               Preferred Appointment Date:
-              <input type="date" name="appointment_date" min="<?= date('Y-m-d') ?>" required value="<?= e($_POST['appointment_date'] ?? date('Y-m-d')) ?>">
+              <input type="date" name="appointment_date" id="appt-date" min="<?= date('Y-m-d') ?>" required value="<?= e($selectedDate) ?>">
             </label>
             <label>
               Preferred Time:
-              <input type="time" name="appointment_time" required value="<?= e($_POST['appointment_time'] ?? '10:00') ?>">
+              <input type="time" name="appointment_time" id="appt-time" required value="<?= e($_POST['appointment_time'] ?? '10:00') ?>">
             </label>
           </div>
 
@@ -239,10 +265,65 @@ require __DIR__ . '/../includes/header.php';
             <textarea name="parent_note" rows="3" maxlength="255" placeholder="Mention any recent fever, specific doctor requests, or accessibility needs..."><?= e($_POST['parent_note'] ?? '') ?></textarea>
           </label>
 
-          <div style="margin-top:12px;">
+          <!-- Confirmation Summary Box -->
+          <div id="booking-summary" style="padding:12px 14px; border:1px dashed var(--border); border-radius:10px; background:rgba(56,189,248,.05); font-size:0.88rem; line-height:1.6;">
+            <strong>Booking Summary:</strong><br>
+            <span class="muted">Child:</span> <?= e($dose['child_name']) ?> &middot;
+            <span class="muted">Dose:</span> <?= e($dose['vaccine_name']) ?> (Dose <?= (int)$dose['dose_number'] ?>)<br>
+            <span class="muted">Hospital:</span> <span id="sum-hosp">Not selected</span> &middot;
+            <span class="muted">When:</span> <span id="sum-when"><?= e($selectedDate) ?> at <?= e($_POST['appointment_time'] ?? '10:00') ?></span>
+          </div>
+
+          <div style="margin-top:6px;">
             <button type="submit" class="btn" style="width:100%;">Confirm Appointment Request</button>
           </div>
         </form>
+
+        <script>
+        (function () {
+          var hospSel  = document.getElementById('hospital-select');
+          var dateIn   = document.getElementById('appt-date');
+          var timeIn   = document.getElementById('appt-time');
+          var slotHint = document.getElementById('slot-hint');
+          var sumHosp  = document.getElementById('sum-hosp');
+          var sumWhen  = document.getElementById('sum-when');
+          var baseDate = <?= json_encode($selectedDate) ?>;
+
+          function updateBookingUI() {
+            var opt = hospSel.options[hospSel.selectedIndex];
+            if (!opt || !opt.value) {
+              timeIn.removeAttribute('min');
+              timeIn.removeAttribute('max');
+              slotHint.textContent = 'Select a hospital to see operating hours and remaining slots.';
+              sumHosp.textContent = 'Not selected';
+            } else {
+              var open = opt.dataset.open;
+              var close = opt.dataset.close;
+              var cap = parseInt(opt.dataset.cap, 10) || 0;
+              var booked = parseInt(opt.dataset.booked, 10) || 0;
+              var left = Math.max(0, cap - booked);
+
+              timeIn.min = open;
+              timeIn.max = close;
+
+              var hintText = 'Operating hours: ' + open + ' – ' + close + '. ';
+              if (dateIn.value === baseDate) {
+                hintText += left + ' of ' + cap + ' slots left on ' + dateIn.value + '.';
+              } else {
+                hintText += 'Daily capacity: ' + cap + ' slots (verified on submit for ' + dateIn.value + ').';
+              }
+              slotHint.textContent = hintText;
+              sumHosp.textContent = opt.dataset.name;
+            }
+            sumWhen.textContent = (dateIn.value || '—') + ' at ' + (timeIn.value || '—');
+          }
+
+          hospSel.addEventListener('change', updateBookingUI);
+          dateIn.addEventListener('change', updateBookingUI);
+          timeIn.addEventListener('input', updateBookingUI);
+          updateBookingUI();
+        })();
+        </script>
       <?php endif; ?>
     </section>
   </div>
