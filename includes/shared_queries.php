@@ -491,6 +491,26 @@ function shared_get_hospital_available_vaccines(int $hospitalId): array
 // =====================================================================
 
 /**
+ * Extract safe business error message when a stored procedure raises SQLSTATE 45000.
+ * Returns a generic fallback for all other SQL errors to avoid leaking DB internals.
+ * 
+ * @param PDOException $e
+ * @param string $fallback
+ * @return string
+ */
+function shared_extract_sp_error(PDOException $e, string $fallback): string
+{
+    $sqlState = (string)($e->errorInfo[0] ?? $e->getCode());
+    if ($sqlState === '45000') {
+        $msg = trim((string)($e->errorInfo[2] ?? ''));
+        if ($msg !== '') {
+            return $msg;
+        }
+    }
+    return $fallback;
+}
+
+/**
  * Touches: appointments, child_vaccinations, appointment_status_history, notifications
  * Calls official stored procedure sp_book_appointment to schedule a visit:
  * - Checks dose status in ('upcoming', 'missed')
@@ -538,19 +558,13 @@ function shared_book_appointment(
         ];
     } catch (PDOException $e) {
         error_log('sp_book_appointment error: ' . $e->getMessage());
-        $raw = $e->getMessage();
-        // Extract custom SIGNAL MESSAGE_TEXT if raised by stored procedure
-        if (preg_match('/1644\s+(.+?)(?:\s*\(|$)/', $raw, $m)) {
-            $userMsg = trim($m[1]);
-        } elseif (preg_match('/SQLSTATE\[45000\]:.*?:\s*\d+\s*(.+)$/', $raw, $m)) {
-            $userMsg = trim($m[1]);
-        } else {
-            $userMsg = 'Booking request could not be completed. Please verify slot availability and try again.';
-        }
         return [
             'success'        => false,
             'appointment_id' => 0,
-            'message'        => $userMsg
+            'message'        => shared_extract_sp_error(
+                $e,
+                'Booking request could not be completed. Please verify slot availability and try again.'
+            )
         ];
     }
 }
@@ -937,17 +951,12 @@ function shared_complete_appointment(
         ];
     } catch (PDOException $e) {
         error_log('sp_complete_appointment error: ' . $e->getMessage());
-        $raw = $e->getMessage();
-        if (preg_match('/1644\s+(.+?)(?:\s*\(|$)/', $raw, $m)) {
-            $userMsg = trim($m[1]);
-        } elseif (preg_match('/SQLSTATE\[45000\]:.*?:\s*\d+\s*(.+)$/', $raw, $m)) {
-            $userMsg = trim($m[1]);
-        } else {
-            $userMsg = 'Appointment completion failed. Please verify that this booking belongs to your hospital and is approved.';
-        }
         return [
             'success' => false,
-            'message' => $userMsg
+            'message' => shared_extract_sp_error(
+                $e,
+                'Appointment completion failed. Please verify that this booking belongs to your hospital and is approved.'
+            )
         ];
     }
 }
