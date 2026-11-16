@@ -114,6 +114,10 @@ require __DIR__ . '/../includes/header.php';
   <?php if (empty($appointments)): ?>
     <div style="text-align:center; padding:36px 12px;">
       <p class="muted">No appointments found under "<?= ucfirst($filter) ?>".</p>
+      <?php if ($filter === 'approved'): ?>
+        <p class="muted" style="font-size:0.88rem; margin-bottom:16px;">Approved visits appear here once an administrator confirms parent bookings. Make sure your vaccine stock is up to date.</p>
+        <a class="btn btn-sm" href="stock.php">Check Vaccine Stock &rarr;</a>
+      <?php endif; ?>
     </div>
   <?php else: ?>
     <div class="scroll">
@@ -203,7 +207,7 @@ require __DIR__ . '/../includes/header.php';
                       &#128137; Complete
                     </summary>
                     <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px; margin-top:8px; min-width:270px; box-shadow:0 4px 12px rgba(0,0,0,0.15);">
-                      <form method="post" action="appointments.php" class="form">
+                      <form method="post" action="appointments.php" class="form" onsubmit="return confirm('Mark appointment #<?= (int)$a['appointment_id'] ?> as completed and deduct 1 dose from stock?');">
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="complete_appointment">
                         <input type="hidden" name="appointment_id" value="<?= (int)$a['appointment_id'] ?>">

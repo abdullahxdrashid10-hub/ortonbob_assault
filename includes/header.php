@@ -12,6 +12,7 @@ require_once __DIR__ . '/../config/config.php';
 $role = $role ?? null;
 $title = $title ?? 'VaxCare';
 $B = BASE_URL;
+$currentPage = basename($_SERVER['PHP_SELF'] ?? '');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -28,28 +29,28 @@ $B = BASE_URL;
   <button class="nav-toggle" aria-label="Menu">&#9776;</button>
   <nav class="nav-links">
   <?php if ($role === 'parent' && !empty($_SESSION['parent_id'])): ?>
-    <a href="<?= $B ?>/parent/dashboard.php">Dashboard</a>
-    <a href="<?= $B ?>/parent/children.php">My Children</a>
-    <a href="<?= $B ?>/parent/schedule.php">Schedule</a>
-    <a href="<?= $B ?>/parent/hospitals.php">Hospitals</a>
-    <a href="<?= $B ?>/parent/bookings.php">Bookings</a>
-    <a href="<?= $B ?>/parent/report.php">Reports</a>
-    <a href="<?= $B ?>/parent/profile.php">Profile</a>
+    <a class="<?= $currentPage === 'dashboard.php' ? 'active' : '' ?>" href="<?= $B ?>/parent/dashboard.php">Dashboard</a>
+    <a class="<?= ($currentPage === 'children.php' || $currentPage === 'child_edit.php') ? 'active' : '' ?>" href="<?= $B ?>/parent/children.php">My Children</a>
+    <a class="<?= $currentPage === 'schedule.php' ? 'active' : '' ?>" href="<?= $B ?>/parent/schedule.php">Schedule</a>
+    <a class="<?= $currentPage === 'hospitals.php' ? 'active' : '' ?>" href="<?= $B ?>/parent/hospitals.php">Hospitals</a>
+    <a class="<?= $currentPage === 'bookings.php' ? 'active' : '' ?>" href="<?= $B ?>/parent/bookings.php">Bookings</a>
+    <a class="<?= $currentPage === 'report.php' ? 'active' : '' ?>" href="<?= $B ?>/parent/report.php">Reports</a>
+    <a class="<?= $currentPage === 'profile.php' ? 'active' : '' ?>" href="<?= $B ?>/parent/profile.php">Profile</a>
     <form method="post" action="<?= $B ?>/parent/logout.php" style="display:inline; margin:0;">
       <?= csrf_field() ?>
       <button type="submit" class="btn btn-sm">Logout</button>
     </form>
   <?php elseif ($role === 'hospital' && !empty($_SESSION['hospital_id'])): ?>
-    <a href="<?= $B ?>/hospital/appointments.php">Appointments</a>
-    <a href="<?= $B ?>/hospital/stock.php">Vaccine Stock</a>
+    <a class="<?= $currentPage === 'appointments.php' ? 'active' : '' ?>" href="<?= $B ?>/hospital/appointments.php">Appointments</a>
+    <a class="<?= $currentPage === 'stock.php' ? 'active' : '' ?>" href="<?= $B ?>/hospital/stock.php">Vaccine Stock</a>
     <span class="who" style="color:var(--primary); font-weight:600; padding:0 6px;"><?= e($_SESSION['hospital_name'] ?? '') ?></span>
     <form method="post" action="<?= $B ?>/hospital/logout.php" style="display:inline; margin:0;">
       <?= csrf_field() ?>
       <button type="submit" class="btn btn-sm">Logout</button>
     </form>
   <?php else: ?>
-    <a href="<?= $B ?>/parent/login.php">Parent Login</a>
-    <a href="<?= $B ?>/hospital/login.php">Hospital Login</a>
+    <a class="<?= $currentPage === 'login.php' && str_contains($_SERVER['PHP_SELF'] ?? '', '/parent/') ? 'active' : '' ?>" href="<?= $B ?>/parent/login.php">Parent Login</a>
+    <a class="<?= $currentPage === 'login.php' && str_contains($_SERVER['PHP_SELF'] ?? '', '/hospital/') ? 'active' : '' ?>" href="<?= $B ?>/hospital/login.php">Hospital Login</a>
     <a class="btn btn-sm" href="<?= $B ?>/parent/register.php">Get Started</a>
   <?php endif; ?>
   </nav>

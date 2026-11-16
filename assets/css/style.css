@@ -16,7 +16,8 @@ h2,h3{margin-top:0}
 backdrop-filter:blur(14px);background:rgba(11,16,32,.65);border-bottom:1px solid var(--line)}
 .brand{font-weight:800;font-size:1.3rem;color:var(--text)}.brand span{color:var(--a)}
 .nav-links{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
-.nav-links a{color:var(--text);opacity:.8;transition:.2s}.nav-links a:hover{opacity:1;color:var(--a)}
+.nav-links a{color:var(--text);opacity:.8;transition:.2s;padding-bottom:2px;border-bottom:2px solid transparent}.nav-links a:hover{opacity:1;color:var(--a)}
+.nav-links a.active{opacity:1;color:var(--a);font-weight:600;border-bottom-color:var(--a)}
 .nav-links a.btn{opacity:1;color:#fff}
 .nav-toggle{display:none;background:none;border:0;color:var(--text);font-size:1.5rem}
 .who{color:var(--muted)}
@@ -43,7 +44,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--a);border-color:
 select option{color:#000}
 .search{display:flex;gap:10px;margin-bottom:20px}.search input,.search select{flex:1}
 /* alerts + badges */
-.alert{padding:12px 16px;border-radius:12px;margin-bottom:16px;border:1px solid}
+.alert{padding:12px 16px;border-radius:12px;margin-bottom:16px;border:1px solid;transition:opacity .45s ease,transform .45s ease}
+.alert.fade-out{opacity:0;transform:translateY(-6px)}
 .alert-success{background:#22c55e22;border-color:var(--ok)}.alert-error{background:#ef444422;border-color:var(--bad)}
 .badge{padding:4px 12px;border-radius:99px;font-size:.8rem;font-weight:600;display:inline-block}
 .b-pending,.badge-warning{background:#f59e0b33;color:#fbbf24}.b-approved,.badge-primary{background:#38bdf833;color:#7dd3fc}

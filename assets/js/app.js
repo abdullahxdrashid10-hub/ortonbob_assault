@@ -20,4 +20,12 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!end) { el.textContent = '0'; return; }
     var id = setInterval(function () { n = Math.min(end, n + step); el.textContent = n; if (n >= end) clearInterval(id); }, 30);
   });
+
+  // Auto-fade success flash messages like a toast after 4 seconds (keep errors visible).
+  document.querySelectorAll('.alert-success').forEach(function (el) {
+    setTimeout(function () {
+      el.classList.add('fade-out');
+      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 480);
+    }, 4000);
+  });
 });
