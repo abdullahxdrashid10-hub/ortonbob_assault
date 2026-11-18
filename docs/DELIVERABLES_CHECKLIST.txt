@@ -1,0 +1,166 @@
+================================================================================
+VACCINATION MANAGEMENT SYSTEM (VaxCare) - APTECH ePROJECT DELIVERABLES CHECKLIST
+================================================================================
+Generated from:
+  1) Aptech eProjects General Standards & Documentation Guide (PDF 1)
+  2) Vaccination Management System Problem Statement (PDF 2)
+  3) Current Codebase & Database (sql/official_schema.sql, commit ca85da2)
+Last Updated: 18-Nov-2026
+================================================================================
+
+
+--------------------------------------------------------------------------------
+PART 1: SOFTWARE MODULES CHECKLIST (FROM PROBLEM STATEMENT PDF 2)
+--------------------------------------------------------------------------------
+
+A. PARENT MODULE (OUR SCOPE)
+----------------------------
+[DONE] Register & Login
+       - parent/register.php (transaction into users + parents, confirm password,
+         column length limits, friendly duplicate email/CNIC handling)
+       - parent/login.php & parent/logout.php (bcrypt password_verify, session
+         regeneration, POST + CSRF logout)
+[DONE] Details of child (add / view / update / soft-delete)
+       - parent/children.php & parent/child_edit.php
+       - Auto-generates 17 vaccination schedule rows via DB trigger
+         trg_children_after_insert -> sp_generate_child_schedule()
+       - Soft-delete (is_active = 0) with active-appointment guard
+[DONE] Vaccination Dates & Upcoming Alerts
+       - parent/dashboard.php (4 KPI cards, doses due within 30 days or overdue,
+         latest 5 notifications with mark-as-read)
+       - parent/schedule.php (progress ring + colour-coded vertical timeline)
+[DONE] Book Hospital / Request for Hospital
+       - parent/hospitals.php (active hospitals only, keyword search by name,
+         city, area, address; live available vaccine chips; 8-vaccine Parent
+         Guide explaining importance, role & components)
+       - parent/book.php (ownership + 30-day eligibility check, hospital hours
+         bounds, slot capacity hint, live summary, CALL sp_book_appointment)
+       - parent/bookings.php (all bookings, status badges, admin remarks,
+         appointment_status_history trail, cancel pending requests)
+[DONE] Report of vaccination taken
+       - parent/report.php (records from vaccination_records, child filter,
+         deterministic certificate ref #, framed print layout with crest & seal)
+[DONE] My Profile
+       - parent/profile.php (edit guardian info + change password with current
+         password verification)
+
+
+B. HOSPITAL MODULE (OUR SCOPE)
+------------------------------
+[DONE] Register & Login
+       - hospital/register.php (transaction into users + hospitals with
+         status='inactive' awaiting admin approval; no auto-seeded stock)
+       - hospital/login.php (checks password FIRST, shows "Your registration is
+         awaiting admin approval" if inactive)
+       - docs/HOSPITAL_ACTIVATION.sql (manual phpMyAdmin activation script)
+[DONE] Receive Approved Appointments & Mark Vaccinated (Completed)
+       - hospital/appointments.php (Today KPI strip, Approved/Completed tabs,
+         child age, allergies, parent contact & note, Complete form calling
+         sp_complete_appointment)
+[STUB] Mark "Not Vaccinated"
+       - No stored procedure exists in sql/official_schema.sql yet.
+       - shared_hospital_mark_not_vaccinated() is stubbed to throw "not
+         available yet" and the button is hidden via FEATURE_NOT_VACCINATED=false.
+[DONE] Update Vaccine Stock (Extra / Real-Schema Requirement)
+       - hospital/stock.php (lists all active vaccines, forces unavailable when
+         quantity = 0, calls sp_update_vaccine_status)
+[DONE] Hospital Profile (Built, not in top nav)
+       - hospital/profile.php works; nav currently shows Appointments, Vaccine
+         Stock, Logout per Step 3B spec.
+
+
+C. ADMIN MODULE (TEAMMATES' SCOPE - NOT IN OUR CODEBASE)
+--------------------------------------------------------
+[TEAM] All child details
+[TEAM] Date & time of vaccination (upcoming dates of all children)
+[TEAM] Report of vaccination (child & date-wise)
+[TEAM] List of vaccines (available / unavailable)
+[TEAM] Request from parents (Approve / Reject via sp_review_appointment)
+[TEAM] Add / Update / Delete Hospital + Activate new hospitals
+[TEAM] List of hospitals & Booking details
+       * NOTE: Database views & procedures for Admin already exist in
+         sql/official_schema.sql (v_all_children, v_booking_details,
+         v_upcoming_vaccinations, v_vaccination_report, sp_review_appointment).
+         Confirm with teammates to merge Admin + Parent + Hospital before final
+         submission!
+
+
+--------------------------------------------------------------------------------
+PART 2: CODE & TECHNICAL STANDARDS CHECKLIST (FROM STANDARDS PDF 1)
+--------------------------------------------------------------------------------
+
+[DONE] Plain PHP + MySQL/MariaDB + Apache (XAMPP) stack
+[DONE] Every code block & function commented; SQL isolated in
+       includes/shared_queries.php with table tags
+[DONE] Security: require_parent() / require_hospital(), ownership checks on IDs,
+       CSRF tokens on every POST (including logout), e() HTML escaping, PDO
+       prepared statements, secure session cookies (httponly, samesite=Lax),
+       errors logged to logs/php-error.log (hidden from browser)
+[DONE] Local assets only (zero CDN links: local Three.js r128, local CSS/JS,
+       local illustrations in assets/img/)
+[LEFT] Manual end-to-end retest in browser after Step 3C + UI updates:
+       - Register parent -> add child -> check schedule -> book at newly
+         registered & activated hospital -> approve via sp_review_appointment
+         -> complete on hospital/appointments.php -> print certificate on
+         parent/report.php -> test 375px mobile layout
+[LEFT] Merge & align with Admin teammates:
+       - Session keys in includes/auth.php
+       - shared_cancel_parent_appointment() (writes to admin-owned tables)
+       - Decision on "Not Vaccinated" stored procedure
+       - Inform team of typo fix in sql/official_schema.sql (v_vaccine_availability)
+[LEFT] Optional DB cleanup before viva:
+       - Remove any old test rows (e.g. "Al-Khidmat Automated Care Clinic")
+         from local vaccination_db if you want a clean hospital directory.
+
+
+--------------------------------------------------------------------------------
+PART 3: REQUIRED DOCUMENTATION DELIVERABLES (FROM STANDARDS PDF 1, PAGES 4-5)
+--------------------------------------------------------------------------------
+The Aptech Project Report must compile the following 13 formal sections, plus
+the Synopsis and Source Code:
+
+  #   Document Name                         Status    Notes
+  --- ------------------------------------- --------- -------------------------
+  0   Project Synopsis / Overview           [PARTIAL] Covered in docs/ANALYSIS.md;
+                                                      needs formatting for report
+  1   Certificate of Completion             [LEFT]    Template / page to prepare
+  2   Table of Contents                     [LEFT]    Auto-generate once report
+                                                      is assembled in Word/PDF
+  3   Problem Definition                    [PARTIAL] Drafted in docs/ANALYSIS.md
+                                                      & Problem Statement PDF
+  4   Customer Requirement Specification    [LEFT]    Formal CRS doc (functional
+      (CRS)                                           & non-functional reqs)
+  5   Project Plan                          [PARTIAL] Milestones tracked in
+                                                      docs/PROGRESS.md; format as
+                                                      Gantt / phase table
+  6   E-R Diagrams                          [LEFT]    Draw ER diagram covering all
+                                                      14 tables in vaccination_db
+  7   Algorithms                            [LEFT]    Write step-by-step algos /
+                                                      pseudocode (schedule gen,
+                                                      30-day check, booking,
+                                                      completion, auth)
+  8   GUI Standards Document                [LEFT]    Document Onyx/Indigo/Mint
+                                                      palette, typography, cards,
+                                                      badges, print rules
+  9   Interface Design Document             [LEFT]    Screenshots + field tables
+                                                      for Parent & Hospital UIs
+  10  Task Sheet                            [LEFT]    Team member task breakdown
+                                                      (Parent/Hospital vs Admin)
+  11  Project Review and Monitoring Report  [PARTIAL] Raw log exists in
+                                                      docs/PROGRESS.md
+  12  Unit Testing Check List               [LEFT]    Formal test-case table
+                                                      (Pass/Fail + screenshots)
+  13  Final Check List                      [LEFT]    Sign-off checklist before
+                                                      submission
+
+
+--------------------------------------------------------------------------------
+PART 4: SUGGESTED ACTION PLAN FOR REMAINING DAYS
+--------------------------------------------------------------------------------
+1. Test the full Parent + Hospital + Admin-SQL flow in Chrome/Edge and take
+   clean screenshots of every screen (needed for Interface Design & Testing docs).
+2. Sync & merge with Admin teammates (if submitting one combined package).
+3. Draft the missing Project Report documents (#1 to #13 above) into a single
+   formatted Word/PDF Project Report.
+4. Do one final git push + clean zip + 5-minute viva walkthrough rehearsal.
+================================================================================
