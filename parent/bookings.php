@@ -35,8 +35,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fetch all appointments for this parent
-$appointments = shared_get_parent_appointments($parentId);
+// Fetch all appointments for this parent and their status history trails
+$appointments  = shared_get_parent_appointments($parentId);
+$historyByAppt = shared_get_appointment_history_for_parent($parentId);
 
 require __DIR__ . '/../includes/header.php';
 ?>
@@ -116,6 +117,17 @@ require __DIR__ . '/../includes/header.php';
                 <span class="badge <?= $badgeClass ?>">
                   <?= ucfirst($status) ?>
                 </span>
+                <?php $trail = $historyByAppt[(int)$a['appointment_id']] ?? []; ?>
+                <?php if (!empty($trail)): ?>
+                  <div class="history-trail" aria-label="Status history">
+                    <?php foreach ($trail as $idx => $step): ?>
+                      <?php if ($idx > 0): ?><span class="history-arrow">&rarr;</span><?php endif; ?>
+                      <span class="history-step" title="<?= e(($step['remarks'] ? $step['remarks'] . ' · ' : '') . date('d-M-Y H:i', strtotime($step['changed_at']))) ?>">
+                        <?= e(ucfirst($step['new_status'])) ?> (<?= date('d-M', strtotime($step['changed_at'])) ?>)
+                      </span>
+                    <?php endforeach; ?>
+                  </div>
+                <?php endif; ?>
               </td>
               <td style="max-width:200px; font-size:0.85rem;">
                 <?php if (!empty($a['parent_note'])): ?>

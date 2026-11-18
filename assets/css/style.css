@@ -78,6 +78,11 @@ select option{color:#1e293b;background:#fff}
 .hero-copy p{color:var(--muted);font-size:1.1rem;line-height:1.6}
 .hero-cta{display:flex;gap:14px;justify-content:flex-start;margin-top:24px;flex-wrap:wrap}
 .hero-media img{width:100%;height:auto;border-radius:var(--r);border:1px solid var(--line);box-shadow:0 14px 36px rgba(44,82,130,.12);display:block}
+.feature-icon{width:40px;height:40px;border-radius:10px;background:rgba(44,82,130,.09);color:var(--a);display:grid;place-items:center;margin-bottom:12px}
+.feature-icon svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.history-trail{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:6px;font-size:.75rem;color:var(--muted)}
+.history-step{background:#f3efe6;border:1px solid var(--line);border-radius:6px;padding:2px 6px;white-space:nowrap}
+.history-arrow{opacity:.6}
 .pill{display:inline-block;padding:6px 16px;border-radius:99px;border:1px solid var(--line);background:var(--card);color:var(--a);font-size:.85rem;font-weight:600}
 .footer{text-align:center;color:var(--muted);padding:24px;border-top:1px solid var(--line)}
 /* scroll-reveal animation (toggled by app.js) */

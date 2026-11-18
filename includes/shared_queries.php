@@ -626,6 +626,32 @@ function shared_get_parent_appointments(int $parentId): array
 }
 
 /**
+ * Touches: appointment_status_history, appointments
+ * Fetch chronological status history entries for all appointments belonging to a parent,
+ * indexed by appointment_id for rendering audit trails.
+ * 
+ * @param int $parentId
+ * @return array<int, array>
+ */
+function shared_get_appointment_history_for_parent(int $parentId): array
+{
+    // Touches: appointment_status_history, appointments
+    $sql = "SELECT h.appointment_id, h.old_status, h.new_status, h.remarks, h.changed_at
+            FROM appointment_status_history h
+            JOIN appointments a ON a.appointment_id = h.appointment_id
+            WHERE a.parent_id = ?
+            ORDER BY h.changed_at ASC, h.history_id ASC";
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$parentId]);
+    $grouped = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $grouped[(int)$row['appointment_id']][] = $row;
+    }
+    return $grouped;
+}
+
+/**
  * WRITES TO ADMIN-OWNED TABLES: confirm with the admin team
  * Touches: appointments, child_vaccinations, appointment_status_history
  * Cancel an appointment if it is currently 'pending'.
@@ -867,6 +893,50 @@ function shared_register_hospital_facility(
         error_log('shared_register_hospital_facility error: ' . $e->getMessage());
         throw $e;
     }
+}
+
+/**
+ * Touches: appointments, vaccines, hospital_vaccine_stock
+ * Fetch "Today" summary KPIs for the hospital dashboard header:
+ * approved visits scheduled today, visits completed today, and low/out-of-stock active vaccines (< 10 units).
+ * 
+ * @param int $hospitalId
+ * @return array{approved_today:int, completed_today:int, low_stock_count:int}
+ */
+function shared_get_hospital_today_summary(int $hospitalId): array
+{
+    // Touches: appointments, vaccines, hospital_vaccine_stock
+    $pdo = db();
+
+    $stmtApp = $pdo->prepare("
+        SELECT COUNT(*) FROM appointments
+        WHERE hospital_id = ? AND status = 'approved' AND appointment_date = CURDATE()
+    ");
+    $stmtApp->execute([$hospitalId]);
+    $approvedToday = (int)$stmtApp->fetchColumn();
+
+    $stmtComp = $pdo->prepare("
+        SELECT COUNT(*) FROM appointments
+        WHERE hospital_id = ? AND status = 'completed' AND DATE(completed_at) = CURDATE()
+    ");
+    $stmtComp->execute([$hospitalId]);
+    $completedToday = (int)$stmtComp->fetchColumn();
+
+    $stmtLow = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM vaccines v
+        LEFT JOIN hospital_vaccine_stock s ON s.vaccine_id = v.vaccine_id AND s.hospital_id = ?
+        WHERE v.is_active = 1
+          AND (s.stock_id IS NULL OR s.status = 'unavailable' OR s.quantity < 10)
+    ");
+    $stmtLow->execute([$hospitalId]);
+    $lowStockCount = (int)$stmtLow->fetchColumn();
+
+    return [
+        'approved_today'  => $approvedToday,
+        'completed_today' => $completedToday,
+        'low_stock_count' => $lowStockCount,
+    ];
 }
 
 /**

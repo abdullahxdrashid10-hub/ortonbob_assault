@@ -1,7 +1,7 @@
 # VaxCare: Build Progress Tracker
 
 > One place to see what has been built, where it lives, what is verified, and what is still open.
-> Last updated: 18-Nov-2026 (Oat White & Slate Blue re-theme + local illustrations).
+> Last updated: 18-Nov-2026 (after Days 3–4 viva features & landing SVG icons).
 
 ---
 
@@ -37,7 +37,8 @@
 | UX #3 | Booking form: hospital hours bounds, slot availability hint, booking summary | `96a77c0` | Done |
 | UX #6 | Active nav highlight, success toast auto-fade, Complete confirm dialog, empty hints | `1074203` | Done |
 | Days 1–2 | `:focus-visible`, ARIA attrs, `:active`/`:disabled` buttons, mobile `flex-wrap`, 2D `#bg-canvas` | `42ea118` | Done |
-| Theme + Assets | Oat White (`#f7f5f0`) & Slate Blue (`#2c5282`) re-theme + local hero & certificate crest images (`assets/img/`) | *latest* | Done |
+| Theme + Assets | Oat White (`#f7f5f0`) & Slate Blue (`#2c5282`) re-theme + onyx/indigo/mint hero & crest images | `180f49d`, `69c95fd` | Done |
+| Days 3–4 | Slate Blue SVG icons on `index.php`, Hospital "Today" KPI strip, `appointment_status_history` trail on `bookings.php` | *latest* | Done |
 
 ---
 
@@ -153,15 +154,12 @@ Business rules enforced in **PHP on top of** the procedures: dose ownership (pro
 
 ## 9. Next steps (remaining 8-day plan)
 
-1. **Days 3–4 — Standout Viva Features:**
-   - Hospital "Today" summary strip on `hospital/appointments.php` (Today's Approved, Completed Today, Low-Stock `< 10` warnings).
-   - Status history trail (`pending → approved → completed` with timestamps from `appointment_status_history`) on `parent/bookings.php`.
-2. **Days 5–6 — Manual End-to-End Testing:**
+1. **Days 5–6 — Manual End-to-End Testing:**
    - Walk through the full parent + hospital + admin-SQL lifecycle in Chrome/Edge (including mobile `375px` width and Print Preview on `report.php`), verifying the new hospital approval path (issue #6).
    - Confirm with the admin team on issues #2, #3, #5, and the schema typo in §7.
-3. **Days 7–9 — Aptech eProject Documentation Set:**
+2. **Days 7–9 — Aptech eProject Documentation Set:**
    - CRS, ER diagram (14 tables), algorithms/flowcharts, GUI standards, unit-test checklist, review report.
-4. **Day 10 — Freeze & Demo Rehearsal:**
+3. **Day 10 — Freeze & Demo Rehearsal:**
    - Final push, zip, and 5-minute live walkthrough.
 
 ---

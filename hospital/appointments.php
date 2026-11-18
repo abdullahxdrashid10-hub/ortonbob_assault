@@ -81,8 +81,9 @@ if (!in_array($filter, ['approved', 'completed'], true)) {
     $filter = 'approved';
 }
 
-// Fetch appointments for this hospital
+// Fetch appointments for this hospital + Today KPI summary strip
 $appointments = shared_get_hospital_appointments_list($hospitalId, $filter);
+$todaySummary = shared_get_hospital_today_summary($hospitalId);
 
 require __DIR__ . '/../includes/header.php';
 ?>
@@ -96,6 +97,27 @@ require __DIR__ . '/../includes/header.php';
     <div>
       <a href="stock.php" class="btn btn-sm btn-ghost">&#128230; Vaccine Stock</a>
     </div>
+  </div>
+</div>
+
+<!-- Hospital "Today" Summary Strip -->
+<div class="stats" style="margin-top:16px;">
+  <div class="stat reveal">
+    <b data-count="<?= $todaySummary['approved_today'] ?>">0</b>
+    <span>Today's Approved Visits</span>
+  </div>
+  <div class="stat reveal">
+    <b data-count="<?= $todaySummary['completed_today'] ?>">0</b>
+    <span>Completed Today</span>
+  </div>
+  <div class="stat reveal">
+    <b data-count="<?= $todaySummary['low_stock_count'] ?>">0</b>
+    <span>
+      Low / Out-of-Stock (&lt;10)
+      <?php if ($todaySummary['low_stock_count'] > 0): ?>
+        &middot; <a href="stock.php">Restock &rarr;</a>
+      <?php endif; ?>
+    </span>
   </div>
 </div>
 
