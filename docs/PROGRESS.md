@@ -1,7 +1,7 @@
 # VaxCare: Build Progress Tracker
 
 > One place to see what has been built, where it lives, what is verified, and what is still open.
-> Last updated: 18-Nov-2026 (after Days 1–2 UX/a11y polish, commit `42ea118`).
+> Last updated: 18-Nov-2026 (Oat White & Slate Blue re-theme + local illustrations).
 
 ---
 
@@ -37,6 +37,7 @@
 | UX #3 | Booking form: hospital hours bounds, slot availability hint, booking summary | `96a77c0` | Done |
 | UX #6 | Active nav highlight, success toast auto-fade, Complete confirm dialog, empty hints | `1074203` | Done |
 | Days 1–2 | `:focus-visible`, ARIA attrs, `:active`/`:disabled` buttons, mobile `flex-wrap`, 2D `#bg-canvas` | `42ea118` | Done |
+| Theme + Assets | Oat White (`#f7f5f0`) & Slate Blue (`#2c5282`) re-theme + local hero & certificate crest images (`assets/img/`) | *latest* | Done |
 
 ---
 
@@ -176,8 +177,10 @@ E project/
 │   ├── header.php, footer.php layout + nav
 ├── parent/                    11 pages (see §3)
 ├── hospital/                  register, login, logout, appointments, stock, profile, inventory (redirect)
-├── assets/css/style.css       theme
-├── assets/js/app.js           menu, scroll reveal, count-up
+├── assets/
+│   ├── css/style.css          Oat White & Slate Blue theme
+│   ├── js/app.js              menu, scroll reveal, count-up, toast, 2D canvas
+│   └── img/                   hero-immunization.jpg, cert-crest.jpg
 ├── sql/official_schema.sql    the real DB (authoritative)
 ├── sql/archive/               old placeholder schemas (reference only)
 ├── docs/

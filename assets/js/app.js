@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
+        ctx.fillStyle = 'rgba(44, 82, 130, 0.22)';
         ctx.fill();
 
         for (var j = i + 1; j < count; j++) {
@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', function () {
             ctx.beginPath();
             ctx.moveTo(p.x, p.y);
             ctx.lineTo(q.x, q.y);
-            ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.12 * (1 - dist / 16000)).toFixed(3) + ')';
+            ctx.strokeStyle = 'rgba(74, 124, 155, ' + (0.11 * (1 - dist / 16000)).toFixed(3) + ')';
             ctx.lineWidth = 1;
             ctx.stroke();
           }

@@ -103,6 +103,7 @@ require __DIR__ . '/../includes/header.php';
   </div>
 
   <div class="cert-header">
+    <img class="cert-crest" src="<?= BASE_URL ?>/assets/img/cert-crest.jpg" alt="VaxCare Official Immunization Crest">
     <h2 style="margin:0 0 6px 0; color:var(--primary); letter-spacing:1.2px; text-transform:uppercase;">
       Child Immunization Record Certificate
     </h2>
