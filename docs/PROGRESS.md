@@ -10,7 +10,7 @@
 | Item | Value |
 |---|---|
 | Project | Vaccination Management System ("VaxCare"), Aptech eProject |
-| Stack | Plain PHP 8, MariaDB (XAMPP), PDO prepared statements, sessions. No framework, no three.js |
+| Stack | Plain PHP 8, MariaDB (XAMPP), PDO prepared statements, sessions. No PHP framework; local Three.js r128 for 3D backdrop |
 | Database | `vaccination_db`, from `sql/official_schema.sql` (team dump, authoritative, never modified by us except one typo fix, see §7) |
 | Our scope | **Parent panel** and **Hospital panel**. Admin panel belongs to teammates |
 | Repo | `github.com/abdullahxdrashid10-hub/ortonbob_assault` (branch `main`) |
@@ -40,7 +40,8 @@
 | Theme + Assets | Oat White (`#f7f5f0`) & Slate Blue (`#2c5282`) re-theme + onyx/indigo/mint hero & crest images | `180f49d`, `69c95fd` | Done |
 | Days 3–4 | Slate Blue SVG icons on `index.php`, Hospital "Today" KPI strip, `appointment_status_history` trail on `bookings.php` | `0ce3c17` | Done |
 | Theme Depth + Vaccine Guide | Mint/indigo card accents, `shared_get_all_active_vaccines()`, `includes/vaccine_guide.php` with 7 generated vaccine illustrations (+ SVG fallback for MR) | `6732090` | Done |
-| Onyx/Indigo/Mint UI | Unified Onyx Black (`#0f111a`), Electric Indigo (`#6366f1`) & Tropical Mint (`#2ee59d`) theme across all pages + structured hospital cards | *latest* | Done |
+| Onyx/Indigo/Mint UI | Unified Onyx Black (`#0f111a`), Electric Indigo (`#6366f1`) & Tropical Mint (`#2ee59d`) theme across all pages + structured hospital cards | `cc8fc04` | Done |
+| 3D WebGL Backdrop | Local Three.js r128 (`three.min.js` + `bg-3d.js`) rendering 3D DNA double-helix, wireframe immunity cells & 3D particle field | *latest* | Done |
 
 ---
 
@@ -179,7 +180,9 @@ E project/
 ├── hospital/                  register, login, logout, appointments, stock, profile, inventory (redirect)
 ├── assets/
 │   ├── css/style.css          Oat White & Slate Blue theme
-│   ├── js/app.js              menu, scroll reveal, count-up, toast, 2D canvas
+│   ├── js/app.js              menu, scroll reveal, count-up, toast
+│   ├── js/three.min.js        local Three.js r128 bundle (no CDN)
+│   ├── js/bg-3d.js            3D WebGL DNA helix + immunity cells backdrop
 │   └── img/                   hero-immunization.jpg, cert-crest.jpg
 ├── sql/official_schema.sql    the real DB (authoritative)
 ├── sql/archive/               old placeholder schemas (reference only)
