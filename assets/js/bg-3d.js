@@ -61,7 +61,7 @@
     ]);
     helixGroup.add(new THREE.Line(lineGeo, rungMat));
   }
-  helixGroup.position.set(9.5, 0, -6);
+  helixGroup.position.set(14.5, 0, -11);
   helixGroup.rotation.z = 0.28;
   scene.add(helixGroup);
 
