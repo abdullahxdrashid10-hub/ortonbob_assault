@@ -1,7 +1,7 @@
 # VaxCare: Build Progress Tracker
 
 > One place to see what has been built, where it lives, what is verified, and what is still open.
-> Last updated: 16-Nov-2026 (after Step 3C, commit `ebfb823`).
+> Last updated: 18-Nov-2026 (after Days 1–2 UX/a11y polish, commit `42ea118`).
 
 ---
 
@@ -31,6 +31,12 @@
 | F1–F6 + 3B | Error logging + friendly error page, try/catch, column-length validation, `book.php` rebuilt, full hospital panel | `76f9897` | Done |
 | 3B (v2) | Hospital approval flow, "awaiting approval" login message, `stock.php`, Not-Vaccinated stub | `ebfb823` | Done (merged into 3C commit) |
 | 3C | Security cleanup, inactive registration, opening-hours check, timezone, docs | `ebfb823` | Done (one item partial, see §8) |
+| Bugfix + UX | CSS variables/badges/textarea fix + strict SQLSTATE `45000` check | `3654517` | Done |
+| UX #1 | Vertical immunization timeline + pure CSS progress ring on `schedule.php` | `d518a6e` | Done |
+| UX #2 | Framed official certificate layout, ref #, signature lines, print CSS on `report.php` | `f9ef67c` | Done |
+| UX #3 | Booking form: hospital hours bounds, slot availability hint, booking summary | `96a77c0` | Done |
+| UX #6 | Active nav highlight, success toast auto-fade, Complete confirm dialog, empty hints | `1074203` | Done |
+| Days 1–2 | `:focus-visible`, ARIA attrs, `:active`/`:disabled` buttons, mobile `flex-wrap`, 2D `#bg-canvas` | `42ea118` | Done |
 
 ---
 
@@ -45,11 +51,11 @@
 | `dashboard.php` | 4 KPI cards, doses due ≤ 30 days grouped by child, 5 latest notifications with mark-as-read | ✅ |
 | `children.php` | List/add active children, soft delete (`is_active=0`), blocked if a dose is `requested`/`booked`. Checks the trigger created schedule rows | ✅ |
 | `child_edit.php` | Edit profile, DOB read-only | ✅ |
-| `schedule.php` | Doses from `child_vaccinations`, Book button only for upcoming/missed AND due ≤ 30 days | ✅ |
+| `schedule.php` | Progress ring (`X/Y doses · %`) + colour-coded vertical timeline from `child_vaccinations`, Book button only for upcoming/missed AND due ≤ 30 days | ✅ |
 | `hospitals.php` | Active hospitals only, LIKE search on name/city/area/address, hours, phone, vaccines in stock | ✅ |
-| `book.php` | Ownership + eligibility check, hospitals stocking that vaccine, date ≥ today, time inside opening hours, `CALL sp_book_appointment` | ✅ |
+| `book.php` | Ownership + eligibility check, hospitals stocking that vaccine, date ≥ today, time bounded to hospital hours, live slot hint & summary, `CALL sp_book_appointment` | ✅ |
 | `bookings.php` | All my appointments with status badges, notes/admin remarks, cancel for `pending` | ✅ |
-| `report.php` | `vaccination_records` per child, print button + print stylesheet | ✅ (basic styling) |
+| `report.php` | `vaccination_records` per child, deterministic ref #, framed certificate layout, signature lines + seal, print stylesheet | ✅ |
 | `profile.php` | Edit parent details, change password (current password verified) | ✅ |
 
 ### Hospital panel (`/hospital`)
@@ -101,7 +107,7 @@ Business rules enforced in **PHP on top of** the procedures: dose ownership (pro
 | Session cookie `httponly`, `samesite=Lax`, `session_regenerate_id` on login | ✅ |
 | Errors hidden from users, logged to file | ✅ |
 | Hospital login can't be used to discover emails (password checked first) | ✅ |
-| Procedure business errors shown, other DB errors generic | ⚠️ Partial, see §8 |
+| Procedure business errors shown, other DB errors generic | ✅ (strict SQLSTATE `45000` check) |
 | No test scripts under web root | ✅ (`/scratch` deleted and git-ignored) |
 
 ---
@@ -130,35 +136,32 @@ Business rules enforced in **PHP on top of** the procedures: dose ownership (pro
 
 ## 8. Known issues and open items (honest list)
 
+*(Resolved since Step 3C: missing CSS classes/variables/textarea in `3654517`, strict SQLSTATE `45000` check in `3654517`, and empty `#bg-canvas` in `42ea118`.)*
+
 | # | Issue | Where | Severity |
 |---|---|---|---|
-| 1 | **Missing CSS.** 3B/3C pages use `badge-primary/success/danger/warning/muted`, `grid3`, `var(--primary/--danger/--border/--surface)`, which don't exist in `style.css`. `textarea` is unstyled. Badges show no colour, the Complete pop-up is transparent | `assets/css/style.css`, `parent/bookings.php`, `parent/book.php`, `parent/hospitals.php`, `parent/report.php`, `hospital/*.php` | **High (visible in demo)** |
-| 2 | Error handling matches the procedure message with a regex on the text, not a strict SQLSTATE `45000` check as the 3B spec asks | `shared_book_appointment()`, `shared_complete_appointment()` | Medium |
-| 3 | CALLs use named placeholders and `@p_appointment_id`, not the exact `(?,?,?,?,?,@appt_id)` pattern from the spec. Works the same | `shared_book_appointment()` | Low |
-| 4 | Parent cancel writes to admin-owned tables (`appointments`, `child_vaccinations`, `appointment_status_history`). Tagged "WRITES TO ADMIN-OWNED TABLES: confirm with the admin team" | `shared_cancel_parent_appointment()` | Needs team decision |
-| 5 | "Not Vaccinated" has no DB procedure. Stub throws "not available yet", button hidden by `FEATURE_NOT_VACCINATED=false` | `shared_hospital_mark_not_vaccinated()` | Waiting on team |
-| 6 | `/scratch` removed from the repo, but the old test script is **still in git history** (commit `76f9897`). Not rewritten because that needs a force-push. It contains only local test logic and the test password `password`, no real secrets | git history | Low, decide if a force-push is OK |
-| 7 | Session keys may need to match the admin panel's. All login logic is in `includes/auth.php` so it can be swapped in one place | `includes/auth.php` | Waiting on admin code |
-| 8 | After 3C, the new inactive-registration + approval + stock-before-booking flow was syntax-checked but **not re-run end to end** (the test script was deleted for security) | `hospital/register.php`, `auth_login_hospital()`, `hospital/stock.php` | Medium, retest manually |
-| 9 | `hospital/profile.php` works but has no nav link | `includes/header.php` | Low |
-| 10 | `#bg-canvas` exists on every page but nothing draws on it | `includes/header.php` | Low |
+| 1 | CALLs use named placeholders and `@p_appointment_id`, not the exact `(?,?,?,?,?,@appt_id)` pattern from the spec. Works the same | `shared_book_appointment()` | Low |
+| 2 | Parent cancel writes to admin-owned tables (`appointments`, `child_vaccinations`, `appointment_status_history`). Tagged "WRITES TO ADMIN-OWNED TABLES: confirm with the admin team" | `shared_cancel_parent_appointment()` | Needs team decision |
+| 3 | "Not Vaccinated" has no DB procedure. Stub throws "not available yet", button hidden by `FEATURE_NOT_VACCINATED=false` | `shared_hospital_mark_not_vaccinated()` | Waiting on team |
+| 4 | `/scratch` removed from the repo, but the old test script is **still in git history** (commit `76f9897`). Not rewritten because that needs a force-push. It contains only local test logic and the test password `password`, no real secrets | git history | Low, decide if a force-push is OK |
+| 5 | Session keys may need to match the admin panel's. All login logic is in `includes/auth.php` so it can be swapped in one place | `includes/auth.php` | Waiting on admin code |
+| 6 | After 3C, the new inactive-registration + approval + stock-before-booking flow was syntax-checked but **not re-run end to end** (the test script was deleted for security) | `hospital/register.php`, `auth_login_hospital()`, `hospital/stock.php` | Medium, retest manually |
+| 7 | `hospital/profile.php` works but has no nav link | `includes/header.php` | Low |
 
 ---
 
-## 9. Next steps (suggested order)
+## 9. Next steps (remaining 8-day plan)
 
-1. **Fix the missing CSS** (issue #1). ~20 lines in `style.css`.
-2. Manually retest the full flow in §6, especially the new hospital approval path (issue #8).
-3. Tighten error handling to check SQLSTATE `45000` (issue #2).
-4. Ask the admin team about issues #4, #5, #7, and the schema typo in §7.
-5. UX upgrades for the viva:
-   - Vaccination timeline with a progress ring on `schedule.php`
-   - Printable certificate layout on `report.php`
-   - Booking form: time limited to hospital hours, "slots left" count, confirm summary
-   - Hospital "Today" summary with low-stock warnings
-   - Status history trail on bookings (from `appointment_status_history`)
-   - Polish: active nav link, empty-state hints, toast messages, dark date/time pickers
-6. eProject documentation set (CRS, ER diagram, test checklist, etc.).
+1. **Days 3–4 — Standout Viva Features:**
+   - Hospital "Today" summary strip on `hospital/appointments.php` (Today's Approved, Completed Today, Low-Stock `< 10` warnings).
+   - Status history trail (`pending → approved → completed` with timestamps from `appointment_status_history`) on `parent/bookings.php`.
+2. **Days 5–6 — Manual End-to-End Testing:**
+   - Walk through the full parent + hospital + admin-SQL lifecycle in Chrome/Edge (including mobile `375px` width and Print Preview on `report.php`), verifying the new hospital approval path (issue #6).
+   - Confirm with the admin team on issues #2, #3, #5, and the schema typo in §7.
+3. **Days 7–9 — Aptech eProject Documentation Set:**
+   - CRS, ER diagram (14 tables), algorithms/flowcharts, GUI standards, unit-test checklist, review report.
+4. **Day 10 — Freeze & Demo Rehearsal:**
+   - Final push, zip, and 5-minute live walkthrough.
 
 ---
 
