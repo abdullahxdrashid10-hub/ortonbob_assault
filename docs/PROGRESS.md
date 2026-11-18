@@ -1,7 +1,7 @@
 # VaxCare: Build Progress Tracker
 
 > One place to see what has been built, where it lives, what is verified, and what is still open.
-> Last updated: 18-Nov-2026 (Theme depth polish + 8-vaccine Parent Guide with local illustrations).
+> Last updated: 18-Nov-2026 (Onyx Black, Electric Indigo & Tropical Mint cohesive theme + upgraded hospital & vaccine cards).
 
 ---
 
@@ -39,7 +39,8 @@
 | Days 1–2 | `:focus-visible`, ARIA attrs, `:active`/`:disabled` buttons, mobile `flex-wrap`, 2D `#bg-canvas` | `42ea118` | Done |
 | Theme + Assets | Oat White (`#f7f5f0`) & Slate Blue (`#2c5282`) re-theme + onyx/indigo/mint hero & crest images | `180f49d`, `69c95fd` | Done |
 | Days 3–4 | Slate Blue SVG icons on `index.php`, Hospital "Today" KPI strip, `appointment_status_history` trail on `bookings.php` | `0ce3c17` | Done |
-| Theme Depth + Vaccine Guide | Mint/indigo card accents, dark slate footer, `shared_get_all_active_vaccines()`, `includes/vaccine_guide.php` with 7 generated vaccine illustrations (+ SVG fallback for MR) | *latest* | Done |
+| Theme Depth + Vaccine Guide | Mint/indigo card accents, `shared_get_all_active_vaccines()`, `includes/vaccine_guide.php` with 7 generated vaccine illustrations (+ SVG fallback for MR) | `6732090` | Done |
+| Onyx/Indigo/Mint UI | Unified Onyx Black (`#0f111a`), Electric Indigo (`#6366f1`) & Tropical Mint (`#2ee59d`) theme across all pages + structured hospital cards | *latest* | Done |
 
 ---
 

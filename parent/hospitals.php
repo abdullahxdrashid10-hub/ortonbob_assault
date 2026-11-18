@@ -64,52 +64,54 @@ require __DIR__ . '/../includes/header.php';
             $bookUrl .= '&child_vaccination_id=' . $cvId;
         }
       ?>
-      <article class="card hover reveal" style="display:flex; flex-direction:column; justify-content:space-between;">
+      <article class="card hover reveal hosp-card">
         <div>
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-            <h3 style="margin:0;"><?= e($h['hospital_name']) ?></h3>
+          <div class="hosp-head">
+            <div>
+              <h3><?= e($h['hospital_name']) ?></h3>
+              <?php if (!empty($h['registration_no'])): ?>
+                <div class="hosp-reg">Reg # <?= e($h['registration_no']) ?></div>
+              <?php endif; ?>
+            </div>
             <span class="badge badge-success">Active</span>
           </div>
 
-          <?php if (!empty($h['registration_no'])): ?>
-            <p class="muted" style="font-size:0.85rem; margin:2px 0;">
-              Reg #: <?= e($h['registration_no']) ?>
-            </p>
-          <?php endif; ?>
+          <div class="hosp-body">
+            <div class="hosp-meta">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <span><?= e($h['address']) ?>, <strong><?= e($h['city']) ?></strong><?= !empty($h['area']) ? ' (' . e($h['area']) . ')' : '' ?></span>
+            </div>
 
-          <p class="muted" style="margin:6px 0;">
-            &#128205; <?= e($h['address']) ?>, <strong><?= e($h['city']) ?></strong><?= !empty($h['area']) ? ' (' . e($h['area']) . ')' : '' ?>
-          </p>
-
-          <?php if (!empty($h['phone'])): ?>
-            <p class="muted" style="margin:4px 0;">
-              &#128222; <?= e($h['phone']) ?>
-            </p>
-          <?php endif; ?>
-
-          <p class="muted" style="margin:4px 0;">
-            &#128337; Hours: <?= substr($h['opening_time'], 0, 5) ?> - <?= substr($h['closing_time'], 0, 5) ?> 
-            &bull; Daily Capacity: <?= (int)$h['daily_capacity'] ?> patients
-          </p>
-
-          <!-- In-Stock Vaccines -->
-          <div style="margin-top:14px;">
-            <strong style="font-size:0.9rem;">Available Vaccines:</strong>
-            <?php if (empty($availableVaccines)): ?>
-              <p class="muted" style="font-size:0.85rem; margin:4px 0;">No live stock reported currently.</p>
-            <?php else: ?>
-              <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;">
-                <?php foreach ($availableVaccines as $v): ?>
-                  <span class="badge badge-primary" style="font-size:0.8rem;" title="<?= e($v['disease_prevented']) ?> (<?= (int)$v['quantity'] ?> in stock)">
-                    <?= e($v['vaccine_name']) ?> (<?= (int)$v['quantity'] ?>)
-                  </span>
-                <?php endforeach; ?>
+            <?php if (!empty($h['phone'])): ?>
+              <div class="hosp-meta">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                <span><?= e($h['phone']) ?></span>
               </div>
             <?php endif; ?>
+
+            <div class="hosp-meta">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span>Hours: <strong><?= substr($h['opening_time'], 0, 5) ?> – <?= substr($h['closing_time'], 0, 5) ?></strong> &bull; <?= (int)$h['daily_capacity'] ?> slots/day</span>
+            </div>
+
+            <div class="hosp-vaccines">
+              <span class="hosp-vaccines-label">Available Vaccines</span>
+              <?php if (empty($availableVaccines)): ?>
+                <p class="muted" style="font-size:0.85rem; margin:0;">No live stock reported currently.</p>
+              <?php else: ?>
+                <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                  <?php foreach ($availableVaccines as $v): ?>
+                    <span class="badge badge-primary" style="font-size:0.78rem;" title="<?= e($v['disease_prevented']) ?> (<?= (int)$v['quantity'] ?> in stock)">
+                      <?= e($v['vaccine_name']) ?> (<?= (int)$v['quantity'] ?>)
+                    </span>
+                  <?php endforeach; ?>
+                </div>
+              <?php endif; ?>
+            </div>
           </div>
         </div>
 
-        <div style="margin-top:20px;">
+        <div class="hosp-foot">
           <a class="btn btn-sm" style="width:100%; text-align:center;" href="<?= $bookUrl ?>">
             Book Appointment Here
           </a>
