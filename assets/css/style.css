@@ -139,7 +139,7 @@ select option{color:#1e293b;background:#fff}
 /* Official Immunization Certificate */
 .certificate-sheet{position:relative;border:2px solid rgba(44,82,130,.28);background:#fff}
 .cert-header{text-align:center;border-bottom:2px solid var(--line);padding-bottom:18px;margin-bottom:20px}
-.cert-crest{width:64px;height:64px;object-fit:contain;margin:0 auto 10px;display:block}
+.cert-crest{width:68px;height:68px;object-fit:cover;border-radius:14px;margin:0 auto 10px;display:block;border:1px solid var(--line)}
 .cert-ref-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;font-size:.85rem;color:var(--muted);margin-bottom:14px}
 .cert-ref-code{font-family:monospace;font-weight:700;color:var(--a);letter-spacing:.5px}
 .cert-child-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;background:#f9f7f2;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:20px;text-align:left}
