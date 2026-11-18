@@ -1075,19 +1075,111 @@ function shared_complete_appointment(
 }
 
 /**
- * Touches: appointments (STUB ONLY - DO NOT WRITE TO APPOINTMENTS DIRECTLY)
- * Task 9: The official database currently has no stored procedure for marking an appointment
- * as 'Not Vaccinated'. To maintain data integrity, activity history, and notification triggers,
- * business logic must not write directly to appointments.
+ * WRITES TO ADMIN-OWNED TABLES: confirm with the admin team
+ * Touches: appointments, child_vaccinations, appointment_status_history, notifications
+ * Marks an approved appointment as Not Vaccinated without altering the official schema:
+ * - Verifies appointment ownership and status = 'approved' (row-locked with FOR UPDATE)
+ * - Updates appointments.status = 'cancelled' and records 'Not Vaccinated: <reason>' in admin_remarks
+ * - Resets child_vaccinations.status to 'missed' (if due_date < CURDATE()) or 'upcoming' so it can be re-booked
+ * - Logs the transition in appointment_status_history
+ * - Notifies the parent (type='system') with the reason and re-booking guidance
+ * - Leaves hospital_vaccine_stock untouched (no dose administered)
  * 
  * @param int $appointmentId
  * @param int $hospitalId
- * @throws BadMethodCallException
+ * @param int $hospitalUserId
+ * @param string $reason
+ * @return array{success:bool, message:string}
  */
-function shared_hospital_mark_not_vaccinated(int $appointmentId, int $hospitalId): void
-{
-    // The DB has no stored procedure for 'Not Vaccinated' yet.
-    throw new BadMethodCallException('Marking as Not Vaccinated is not available yet (awaiting database stored procedure).');
+function shared_hospital_mark_not_vaccinated(
+    int $appointmentId,
+    int $hospitalId,
+    int $hospitalUserId,
+    string $reason = ''
+): array {
+    // WRITES TO ADMIN-OWNED TABLES: confirm with the admin team
+    $pdo = db();
+    $cleanReason = trim($reason);
+    if ($cleanReason === '') {
+        $cleanReason = 'Patient did not receive dose at visit';
+    }
+    $remarkText = mb_substr('Not Vaccinated: ' . $cleanReason, 0, 255);
+
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare("
+            SELECT a.appointment_id, a.child_vaccination_id, a.status,
+                   c.full_name AS child_name, v.vaccine_name, cv.dose_number, p.user_id AS parent_user_id
+            FROM appointments a
+            JOIN children c ON c.child_id = a.child_id
+            JOIN parents p ON p.parent_id = a.parent_id
+            JOIN vaccines v ON v.vaccine_id = a.vaccine_id
+            JOIN child_vaccinations cv ON cv.child_vaccination_id = a.child_vaccination_id
+            WHERE a.appointment_id = ? AND a.hospital_id = ?
+            FOR UPDATE
+        ");
+        $stmt->execute([$appointmentId, $hospitalId]);
+        $apt = $stmt->fetch();
+
+        if (!$apt) {
+            $pdo->rollBack();
+            return ['success' => false, 'message' => 'Appointment not found or does not belong to your healthcare facility.'];
+        }
+        if ($apt['status'] !== 'approved') {
+            $pdo->rollBack();
+            return ['success' => false, 'message' => 'Only approved appointments can be marked as Not Vaccinated.'];
+        }
+
+        // 1. Update appointment status to 'cancelled' with explicit Not Vaccinated remark
+        $upApt = $pdo->prepare("UPDATE appointments SET status = 'cancelled', admin_remarks = ? WHERE appointment_id = ?");
+        $upApt->execute([$remarkText, $appointmentId]);
+
+        // 2. Re-open the child_vaccinations dose so parent can re-book
+        $upCv = $pdo->prepare("
+            UPDATE child_vaccinations
+            SET status = IF(due_date < CURDATE(), 'missed', 'upcoming')
+            WHERE child_vaccination_id = ?
+        ");
+        $upCv->execute([(int)$apt['child_vaccination_id']]);
+
+        // 3. Record audit trail in appointment_status_history
+        $insHist = $pdo->prepare("
+            INSERT INTO appointment_status_history (appointment_id, old_status, new_status, changed_by, remarks)
+            VALUES (?, 'approved', 'cancelled', ?, ?)
+        ");
+        $insHist->execute([$appointmentId, $hospitalUserId, $remarkText]);
+
+        // 4. Notify parent so they know why it wasn't administered and can re-book
+        $notifTitle = 'Dose not administered — re-booking open';
+        $notifMsg   = sprintf(
+            'Appointment #%d (%s — %s, Dose %d) was marked Not Vaccinated (%s). You may book a new slot anytime.',
+            $appointmentId,
+            $apt['child_name'],
+            $apt['vaccine_name'],
+            (int)$apt['dose_number'],
+            $cleanReason
+        );
+        $insNotif = $pdo->prepare("
+            INSERT INTO notifications (user_id, title, message, type, related_appointment_id)
+            VALUES (?, ?, ?, 'system', ?)
+        ");
+        $insNotif->execute([(int)$apt['parent_user_id'], $notifTitle, mb_substr($notifMsg, 0, 500), $appointmentId]);
+
+        $pdo->commit();
+        return [
+            'success' => true,
+            'message' => "Appointment #$appointmentId marked as Not Vaccinated. The dose is now open for the parent to re-book."
+        ];
+    } catch (PDOException $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        error_log('shared_hospital_mark_not_vaccinated error: ' . $e->getMessage());
+        return [
+            'success' => false,
+            'message' => 'Could not update appointment status. Please try again.'
+        ];
+    }
 }
 
 /**

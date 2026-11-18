@@ -8,7 +8,7 @@
 date_default_timezone_set('Asia/Karachi');
 
 // Feature flags
-const FEATURE_NOT_VACCINATED = false;
+const FEATURE_NOT_VACCINATED = true;
 
 // ---- Task F1: Error handling & logging configuration ----
 ini_set('display_errors', '0');

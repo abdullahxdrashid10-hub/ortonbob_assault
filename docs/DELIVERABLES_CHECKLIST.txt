@@ -57,10 +57,13 @@ B. HOSPITAL MODULE (OUR SCOPE)
        - hospital/appointments.php (Today KPI strip, Approved/Completed tabs,
          child age, allergies, parent contact & note, Complete form calling
          sp_complete_appointment)
-[STUB] Mark "Not Vaccinated"
-       - No stored procedure exists in sql/official_schema.sql yet.
-       - shared_hospital_mark_not_vaccinated() is stubbed to throw "not
-         available yet" and the button is hidden via FEATURE_NOT_VACCINATED=false.
+[DONE] Mark "Not Vaccinated"
+       - Implemented in shared_hospital_mark_not_vaccinated() + enabled via
+         FEATURE_NOT_VACCINATED = true in hospital/appointments.php.
+       - Records reason in admin_remarks & appointment_status_history, sets
+         appointments.status='cancelled', re-opens child_vaccinations dose
+         ('missed' or 'upcoming') for re-booking, notifies parent, and leaves
+         stock untouched. (Tagged WRITES TO ADMIN-OWNED TABLES for team sync.)
 [DONE] Update Vaccine Stock (Extra / Real-Schema Requirement)
        - hospital/stock.php (lists all active vaccines, forces unavailable when
          quantity = 0, calls sp_update_vaccine_status)

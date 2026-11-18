@@ -65,13 +65,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         redirect('hospital/appointments.php?f=' . urlencode($_POST['current_filter'] ?? 'approved'));
     } elseif ($action === 'not_vaccinated') {
-        // Requirement 9: Call stub function
-        try {
-            shared_hospital_mark_not_vaccinated((int)($_POST['appointment_id'] ?? 0), $hospitalId);
-        } catch (BadMethodCallException $e) {
-            flash('error', $e->getMessage());
+        $aptId  = (int)($_POST['appointment_id'] ?? 0);
+        $reason = trim($_POST['reason'] ?? '');
+
+        if (!FEATURE_NOT_VACCINATED) {
+            flash('error', 'This feature is currently disabled.');
+        } elseif ($aptId <= 0) {
+            flash('error', 'Invalid appointment selected.');
+        } elseif ($reason === '' || mb_strlen($reason) > 200) {
+            flash('error', 'Please provide a brief reason (up to 200 characters) for marking Not Vaccinated.');
+        } else {
+            $res = shared_hospital_mark_not_vaccinated($aptId, $hospitalId, $userId, $reason);
+            flash($res['success'] ? 'success' : 'error', $res['message']);
         }
-        redirect('hospital/appointments.php?f=approved');
+        redirect('hospital/appointments.php?f=' . urlencode($_POST['current_filter'] ?? 'approved'));
     }
 }
 
@@ -258,12 +265,28 @@ require __DIR__ . '/../includes/header.php';
                   </details>
 
                   <?php if (FEATURE_NOT_VACCINATED): ?>
-                    <form method="post" action="appointments.php" style="display:inline; margin-left:4px;">
-                      <?= csrf_field() ?>
-                      <input type="hidden" name="action" value="not_vaccinated">
-                      <input type="hidden" name="appointment_id" value="<?= (int)$a['appointment_id'] ?>">
-                      <button type="submit" class="btn btn-sm btn-ghost" style="color:var(--danger); border-color:var(--danger);">Not Vaccinated</button>
-                    </form>
+                    <details style="position:relative; margin-top:6px;">
+                      <summary class="btn btn-sm btn-danger" style="list-style:none; cursor:pointer; width:100%; text-align:center;">
+                        Not Vaccinated
+                      </summary>
+                      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px; margin-top:8px; min-width:270px; box-shadow:0 4px 12px rgba(0,0,0,0.25);">
+                        <form method="post" action="appointments.php" class="form" onsubmit="return confirm('Mark appointment #<?= (int)$a['appointment_id'] ?> as Not Vaccinated? Stock will NOT be deducted and the parent can re-book.');">
+                          <?= csrf_field() ?>
+                          <input type="hidden" name="action" value="not_vaccinated">
+                          <input type="hidden" name="appointment_id" value="<?= (int)$a['appointment_id'] ?>">
+                          <input type="hidden" name="current_filter" value="<?= e($filter) ?>">
+
+                          <label style="font-size:0.85rem;">
+                            Reason (Required):
+                            <input type="text" name="reason" required maxlength="200" placeholder="e.g. Child had fever / Patient no-show" style="padding:6px; font-size:0.85rem;">
+                          </label>
+
+                          <div style="margin-top:10px;">
+                            <button type="submit" class="btn btn-sm btn-danger" style="width:100%;">Confirm Not Vaccinated</button>
+                          </div>
+                        </form>
+                      </div>
+                    </details>
                   <?php endif; ?>
 
                 <?php elseif ($status === 'completed'): ?>
