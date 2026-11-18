@@ -1,9 +1,14 @@
-/* app.js - small UI behaviours: mobile menu, scroll-reveal, count-up numbers.
-   No external libraries. (three.js background will be added last in its own file.) */
+/* app.js - small UI behaviours: mobile menu, scroll-reveal, count-up numbers,
+   toast auto-fade, and subtle 2D canvas particle backdrop (plain JS, no external libraries). */
 document.addEventListener('DOMContentLoaded', function () {
-  // Mobile navigation toggle.
+  // Mobile navigation toggle with aria-expanded sync.
   var t = document.querySelector('.nav-toggle'), l = document.querySelector('.nav-links');
-  if (t) t.addEventListener('click', function () { l.classList.toggle('open'); });
+  if (t && l) {
+    t.addEventListener('click', function () {
+      var open = l.classList.toggle('open');
+      t.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  }
 
   // Reveal elements when they scroll into view.
   var io = new IntersectionObserver(function (es) {
@@ -28,4 +33,62 @@ document.addEventListener('DOMContentLoaded', function () {
       setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 480);
     }, 4000);
   });
+
+  // Subtle 2D floating particle & constellation backdrop on #bg-canvas.
+  var canvas = document.getElementById('bg-canvas');
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (canvas && canvas.getContext && !reduceMotion) {
+    var ctx = canvas.getContext('2d');
+    var particles = [];
+    var count = 34;
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    for (var i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.35,
+        vy: (Math.random() - 0.5) * 0.35,
+        r: Math.random() * 1.8 + 0.8
+      });
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (var i = 0; i < count; i++) {
+        var p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
+        ctx.fill();
+
+        for (var j = i + 1; j < count; j++) {
+          var q = particles[j];
+          var dx = p.x - q.x, dy = p.y - q.y;
+          var dist = dx * dx + dy * dy;
+          if (dist < 16000) {
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(q.x, q.y);
+            ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.12 * (1 - dist / 16000)).toFixed(3) + ')';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+        }
+      }
+      requestAnimationFrame(draw);
+    }
+    requestAnimationFrame(draw);
+  }
 });

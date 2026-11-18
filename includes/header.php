@@ -26,8 +26,8 @@ $currentPage = basename($_SERVER['PHP_SELF'] ?? '');
 <canvas id="bg-canvas" aria-hidden="true"></canvas>
 <header class="nav">
   <a class="brand" href="<?= $B ?>/index.php">&#128137; Vax<span>Care</span></a>
-  <button class="nav-toggle" aria-label="Menu">&#9776;</button>
-  <nav class="nav-links">
+  <button class="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="main-nav">&#9776;</button>
+  <nav class="nav-links" id="main-nav">
   <?php if ($role === 'parent' && !empty($_SESSION['parent_id'])): ?>
     <a class="<?= $currentPage === 'dashboard.php' ? 'active' : '' ?>" href="<?= $B ?>/parent/dashboard.php">Dashboard</a>
     <a class="<?= ($currentPage === 'children.php' || $currentPage === 'child_edit.php') ? 'active' : '' ?>" href="<?= $B ?>/parent/children.php">My Children</a>

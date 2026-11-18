@@ -125,9 +125,10 @@ require __DIR__ . '/../includes/header.php';
                   required 
                   style="width:75px; padding:5px; font-size:0.85rem;"
                   title="Dose count in stock"
+                  aria-label="Stock quantity for <?= e($item['vaccine_name']) ?>"
                 >
 
-                <select name="status" style="width:115px; padding:5px; font-size:0.85rem;">
+                <select name="status" style="width:115px; padding:5px; font-size:0.85rem;" aria-label="Availability status for <?= e($item['vaccine_name']) ?>">
                   <option value="available" <?= ($item['stock_status'] === 'available' && (int)$item['quantity'] > 0) ? 'selected' : '' ?>>Available</option>
                   <option value="unavailable" <?= ($item['stock_status'] === 'unavailable' || (int)$item['quantity'] === 0) ? 'selected' : '' ?>>Unavailable</option>
                 </select>
