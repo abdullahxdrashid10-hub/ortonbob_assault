@@ -71,7 +71,7 @@
 | `login.php` / `logout.php` | Password checked **first**, then "Your registration is awaiting admin approval" if inactive. Logout POST + CSRF | ✅ |
 | `appointments.php` | Tabs Approved / Completed. Child, age, allergies, vaccine, dose, parent, note. Complete form → PHP ownership pre-check → `CALL sp_complete_appointment` | ✅ |
 | `stock.php` | All active vaccines LEFT JOIN stock. Rejects unknown/inactive vaccines, forces `unavailable` at quantity 0, `CALL sp_update_vaccine_status` | ✅ |
-| `profile.php` | Edit hospital details + change password | ✅ built, **not in nav** (3B v2 nav spec = Appointments, Vaccine Stock, Logout) |
+| `profile.php` | Edit hospital details + change password | ✅ (in hospital top nav) |
 | `inventory.php` | Redirect to `stock.php` (kept for old links) | Legacy stub |
 
 ### Shared
@@ -150,8 +150,8 @@ Business rules enforced in **PHP on top of** the procedures: dose ownership (pro
 | 3 | "Not Vaccinated" has no DB procedure, so `shared_hospital_mark_not_vaccinated()` was implemented as a transaction (`appointments.status='cancelled'`, re-opens dose, logs history, notifies parent) and tagged `WRITES TO ADMIN-OWNED TABLES` | `shared_hospital_mark_not_vaccinated()` | Needs team confirmation |
 | 4 | `/scratch` removed from the repo, but the old test script is **still in git history** (commit `76f9897`). Not rewritten because that needs a force-push. It contains only local test logic and the test password `password`, no real secrets | git history | Low, decide if a force-push is OK |
 | 5 | Session keys may need to match the admin panel's. All login logic is in `includes/auth.php` so it can be swapped in one place | `includes/auth.php` | Waiting on admin code |
-| 6 | After 3C, the new inactive-registration + approval + stock-before-booking flow was syntax-checked but **not re-run end to end** (the test script was deleted for security) | `hospital/register.php`, `auth_login_hospital()`, `hospital/stock.php` | Medium, retest manually |
-| 7 | `hospital/profile.php` works but has no nav link | `includes/header.php` | Low |
+| 6 | After 3C, end-to-end flow was verified via temporary CLI test script outside web root (including inactive hospital approval, stock check, Not Vaccinated, and Complete) | `hospital/register.php`, `auth_login_hospital()`, `hospital/stock.php` | ✅ Verified |
+| 7 | All 8 vaccine illustrations (`vac-*.jpg`) + `hospital/profile.php` nav link + `children.php` input preservation + Escape-key popup close | `assets/img/`, `includes/header.php`, `parent/children.php`, `assets/js/app.js` | ✅ Done |
 
 ---
 

@@ -235,7 +235,7 @@ require __DIR__ . '/../includes/header.php';
                     <summary class="btn btn-sm" style="list-style:none; cursor:pointer;">
                       &#128137; Complete
                     </summary>
-                    <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px; margin-top:8px; min-width:270px; box-shadow:0 4px 12px rgba(0,0,0,0.15);">
+                    <div class="action-pop">
                       <form method="post" action="appointments.php" class="form" onsubmit="return confirm('Mark appointment #<?= (int)$a['appointment_id'] ?> as completed and deduct 1 dose from stock?');">
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="complete_appointment">
@@ -269,7 +269,7 @@ require __DIR__ . '/../includes/header.php';
                       <summary class="btn btn-sm btn-danger" style="list-style:none; cursor:pointer; width:100%; text-align:center;">
                         Not Vaccinated
                       </summary>
-                      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px; margin-top:8px; min-width:270px; box-shadow:0 4px 12px rgba(0,0,0,0.25);">
+                      <div class="action-pop">
                         <form method="post" action="appointments.php" class="form" onsubmit="return confirm('Mark appointment #<?= (int)$a['appointment_id'] ?> as Not Vaccinated? Stock will NOT be deducted and the parent can re-book.');">
                           <?= csrf_field() ?>
                           <input type="hidden" name="action" value="not_vaccinated">

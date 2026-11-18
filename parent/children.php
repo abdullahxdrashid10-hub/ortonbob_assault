@@ -72,6 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // Task F3: Server-side validation matching database schema column constraints
+        $hasError = true;
         if ($fullName === '' || mb_strlen($fullName) > 120) {
             flash('error', 'Child full name is required and cannot exceed 120 characters.');
         } elseif (!$isValidDate) {
@@ -111,14 +112,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($scheduleCount === 0) {
                     flash('error', 'Child was registered, but automatic vaccination schedule generation failed. Please contact system support.');
                 } else {
+                    $hasError = false;
                     // Task 0b: Do not call e() on text passed to flash() - header already escapes it
                     flash('success', "Child profile for {$fullName} added successfully! $scheduleCount scheduled vaccination doses generated.");
                 }
             }
         }
+        if ($hasError) {
+            $_SESSION['old_child'] = $_POST;
+        }
     }
     redirect('parent/children.php');
 }
+
+// Retrieve preserved form values if validation failed on previous POST
+$oldChild = $_SESSION['old_child'] ?? [];
+unset($_SESSION['old_child']);
 
 // Fetch all active children belonging to this parent
 $kids = shared_get_parent_children($parentId);
@@ -140,20 +149,20 @@ require __DIR__ . '/../includes/header.php';
 
       <label>
         Child Full Name:
-        <input type="text" name="full_name" required placeholder="e.g. Ayaan Khan" value="<?= e($_POST['full_name'] ?? '') ?>">
+        <input type="text" name="full_name" required maxlength="120" placeholder="e.g. Ayaan Khan" value="<?= e($oldChild['full_name'] ?? '') ?>">
       </label>
 
       <label>
         Date of Birth:
-        <input type="date" name="date_of_birth" min="<?= date('Y-m-d', strtotime('-13 years')) ?>" max="<?= date('Y-m-d') ?>" required value="<?= e($_POST['date_of_birth'] ?? '') ?>">
+        <input type="date" name="date_of_birth" min="<?= date('Y-m-d', strtotime('-13 years')) ?>" max="<?= date('Y-m-d') ?>" required value="<?= e($oldChild['date_of_birth'] ?? '') ?>">
       </label>
 
       <label>
         Gender:
         <select name="gender" required>
-          <option value="male" <?= (($_POST['gender'] ?? '') === 'male') ? 'selected' : '' ?>>Male</option>
-          <option value="female" <?= (($_POST['gender'] ?? '') === 'female') ? 'selected' : '' ?>>Female</option>
-          <option value="other" <?= (($_POST['gender'] ?? '') === 'other') ? 'selected' : '' ?>>Other</option>
+          <option value="male" <?= (($oldChild['gender'] ?? '') === 'male') ? 'selected' : '' ?>>Male</option>
+          <option value="female" <?= (($oldChild['gender'] ?? '') === 'female') ? 'selected' : '' ?>>Female</option>
+          <option value="other" <?= (($oldChild['gender'] ?? '') === 'other') ? 'selected' : '' ?>>Other</option>
         </select>
       </label>
 
@@ -161,7 +170,7 @@ require __DIR__ . '/../includes/header.php';
         Blood Group:
         <select name="blood_group">
           <?php foreach ($validBloodGroups as $bg): ?>
-            <option value="<?= e($bg) ?>" <?= (($_POST['blood_group'] ?? 'unknown') === $bg) ? 'selected' : '' ?>>
+            <option value="<?= e($bg) ?>" <?= (($oldChild['blood_group'] ?? 'unknown') === $bg) ? 'selected' : '' ?>>
               <?= e(strtoupper($bg)) ?>
             </option>
           <?php endforeach; ?>
@@ -170,22 +179,22 @@ require __DIR__ . '/../includes/header.php';
 
       <label>
         Birth Weight in KG (Optional):
-        <input type="number" step="0.01" min="0.5" max="15" name="birth_weight_kg" placeholder="e.g. 3.25" value="<?= e($_POST['birth_weight_kg'] ?? '') ?>">
+        <input type="number" step="0.01" min="0.30" max="9.99" name="birth_weight_kg" placeholder="e.g. 3.25" value="<?= e($oldChild['birth_weight_kg'] ?? '') ?>">
       </label>
 
       <label>
         Birth Certificate / Registration No (Optional):
-        <input type="text" name="birth_certificate_no" placeholder="e.g. B-123456" value="<?= e($_POST['birth_certificate_no'] ?? '') ?>">
+        <input type="text" name="birth_certificate_no" maxlength="60" placeholder="e.g. B-123456" value="<?= e($oldChild['birth_certificate_no'] ?? '') ?>">
       </label>
 
       <label>
         Allergies (Optional):
-        <input type="text" name="allergies" placeholder="e.g. None known, Penicillin" value="<?= e($_POST['allergies'] ?? '') ?>">
+        <input type="text" name="allergies" maxlength="255" placeholder="e.g. None known, Penicillin" value="<?= e($oldChild['allergies'] ?? '') ?>">
       </label>
 
       <label>
         Medical Notes (Optional):
-        <textarea name="medical_notes" rows="2" style="padding:12px; border-radius:10px; border:1px solid var(--line); background:rgba(0,0,0,.25); color:var(--text); font-family:inherit;" placeholder="Any medical conditions or pediatrician instructions"><?= e($_POST['medical_notes'] ?? '') ?></textarea>
+        <textarea name="medical_notes" rows="2" maxlength="1000" placeholder="Any medical conditions or pediatrician instructions"><?= e($oldChild['medical_notes'] ?? '') ?></textarea>
       </label>
 
       <div style="margin-top:8px;">

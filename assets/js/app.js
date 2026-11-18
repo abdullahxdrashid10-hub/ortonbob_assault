@@ -33,4 +33,11 @@ document.addEventListener('DOMContentLoaded', function () {
       setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 480);
     }, 4000);
   });
+
+  // Close open <details> action popups on Escape key for keyboard accessibility.
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('details[open]').forEach(function (d) { d.removeAttribute('open'); });
+    }
+  });
 });

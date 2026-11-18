@@ -43,6 +43,7 @@ $currentPage = basename($_SERVER['PHP_SELF'] ?? '');
   <?php elseif ($role === 'hospital' && !empty($_SESSION['hospital_id'])): ?>
     <a class="<?= $currentPage === 'appointments.php' ? 'active' : '' ?>" href="<?= $B ?>/hospital/appointments.php">Appointments</a>
     <a class="<?= $currentPage === 'stock.php' ? 'active' : '' ?>" href="<?= $B ?>/hospital/stock.php">Vaccine Stock</a>
+    <a class="<?= $currentPage === 'profile.php' ? 'active' : '' ?>" href="<?= $B ?>/hospital/profile.php">Profile</a>
     <span class="who" style="color:var(--primary); font-weight:600; padding:0 6px;"><?= e($_SESSION['hospital_name'] ?? '') ?></span>
     <form method="post" action="<?= $B ?>/hospital/logout.php" style="display:inline; margin:0;">
       <?= csrf_field() ?>

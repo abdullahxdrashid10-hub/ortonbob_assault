@@ -68,6 +68,8 @@ select option{color:#f1f5f9;background:#171b28}
 .scroll{overflow-x:auto}
 .row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--line)}
 .actions{display:flex;gap:8px;align-items:center}.actions form{margin:0}
+.action-pop{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:8px;min-width:250px;max-width:88vw;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.action-pop input{padding:7px 9px;font-size:.86rem}
 /* stats */
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px;margin-bottom:24px}
 .stat{position:relative;overflow:hidden;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.28)}
