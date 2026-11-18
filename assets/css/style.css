@@ -10,7 +10,8 @@ background:radial-gradient(1200px 600px at 8% -10%,rgba(44,82,130,.08),transpare
 a{color:var(--a);text-decoration:none}
 a:focus-visible,.btn:focus-visible,.tab:focus-visible,.nav-toggle:focus-visible,summary:focus-visible{outline:2px solid var(--a);outline-offset:3px}
 .container{width:min(1100px,92%);margin:0 auto;padding:32px 0;flex:1}
-h1{font-size:clamp(1.8rem,4vw,2.6rem);margin:.2em 0 .6em;color:var(--text)}
+h1{font-size:clamp(1.8rem,4vw,2.6rem);margin:.2em 0 .6em;color:var(--text);letter-spacing:-.02em}
+h2{letter-spacing:-.015em}
 h2,h3{margin-top:0;color:var(--text)}
 .muted{color:var(--muted)}
 /* nav */
@@ -35,8 +36,8 @@ background:linear-gradient(135deg,var(--a),var(--b));transition:transform .2s,bo
 .btn-danger{background:linear-gradient(135deg,#dc2626,var(--bad))}
 .btn-danger:hover{box-shadow:0 10px 24px rgba(185,28,28,.25)}
 /* cards */
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:24px;box-shadow:0 4px 18px rgba(30,41,59,.04);margin-bottom:20px}
-.card.hover{transition:transform .25s,border-color .25s,box-shadow .25s}.card.hover:hover{transform:translateY(-5px);border-color:var(--a);box-shadow:0 12px 28px rgba(44,82,130,.1)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:24px;box-shadow:0 1px 3px rgba(30,41,59,.05),0 10px 26px rgba(44,82,130,.06);margin-bottom:20px}
+.card.hover{transition:transform .25s,border-color .25s,box-shadow .25s}.card.hover:hover{transform:translateY(-5px);border-color:var(--a);box-shadow:0 6px 14px rgba(30,41,59,.06),0 16px 34px rgba(44,82,130,.12)}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:20px}
 .grid2{display:grid;grid-template-columns:1fr 1.4fr;gap:20px;align-items:start}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:start}
@@ -59,13 +60,15 @@ select option{color:#1e293b;background:#fff}
 .badge-muted{background:#ece8df;color:var(--muted)}
 /* table */
 .table{width:100%;border-collapse:collapse}.table th,.table td{padding:12px 10px;text-align:left;border-bottom:1px solid var(--line)}
+.table tbody tr{transition:background .15s}.table tbody tr:hover{background:rgba(44,82,130,.035)}
 .table th{color:var(--muted);font-weight:600;font-size:.82rem;text-transform:uppercase;letter-spacing:.3px}
 .scroll{overflow-x:auto}
 .row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--line)}
 .actions{display:flex;gap:8px;align-items:center}.actions form{margin:0}
 /* stats */
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px;margin-bottom:24px}
-.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px;text-align:center;box-shadow:0 4px 16px rgba(30,41,59,.04)}
+.stat{position:relative;overflow:hidden;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px;text-align:center;box-shadow:0 1px 3px rgba(30,41,59,.05),0 8px 22px rgba(44,82,130,.06)}
+.stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--a),#10b981)}
 .stat b{display:block;font-size:2.4rem;background:linear-gradient(135deg,var(--a),var(--b));-webkit-background-clip:text;color:transparent}
 .stat span{color:var(--muted);font-size:.9rem}
 /* tabs */
@@ -78,13 +81,35 @@ select option{color:#1e293b;background:#fff}
 .hero-copy p{color:var(--muted);font-size:1.1rem;line-height:1.6}
 .hero-cta{display:flex;gap:14px;justify-content:flex-start;margin-top:24px;flex-wrap:wrap}
 .hero-media img{width:100%;height:auto;border-radius:var(--r);border:1px solid var(--line);box-shadow:0 14px 36px rgba(44,82,130,.12);display:block}
-.feature-icon{width:40px;height:40px;border-radius:10px;background:rgba(44,82,130,.09);color:var(--a);display:grid;place-items:center;margin-bottom:12px}
+.feature-icon{width:42px;height:42px;border-radius:11px;background:rgba(44,82,130,.09);color:var(--a);display:grid;place-items:center;margin-bottom:12px}
+.feature-icon.fi-mint{background:rgba(16,185,129,.12);color:#0f766e}
+.feature-icon.fi-indigo{background:rgba(79,70,229,.1);color:#4338ca}
+.feature-icon.fi-amber{background:rgba(217,119,6,.11);color:#b45309}
 .feature-icon svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .history-trail{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:6px;font-size:.75rem;color:var(--muted)}
 .history-step{background:#f3efe6;border:1px solid var(--line);border-radius:6px;padding:2px 6px;white-space:nowrap}
 .history-arrow{opacity:.6}
-.pill{display:inline-block;padding:6px 16px;border-radius:99px;border:1px solid var(--line);background:var(--card);color:var(--a);font-size:.85rem;font-weight:600}
-.footer{text-align:center;color:var(--muted);padding:24px;border-top:1px solid var(--line)}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:99px;border:1px solid var(--line);background:var(--card);color:var(--a);font-size:.85rem;font-weight:600;box-shadow:0 2px 8px rgba(30,41,59,.04)}
+.live-dot{width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,.22);display:inline-block}
+.footer{text-align:center;color:#cbd5e1;padding:24px;background:#131c2e;border-top:3px solid #2c5282;margin-top:36px;font-size:.92rem}
+
+/* Vaccine Guide Section */
+.vaccine-section{margin-top:36px}
+.vaccine-section-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px;margin-bottom:20px}
+.vaccine-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
+.vaccine-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:0 1px 3px rgba(30,41,59,.05),0 10px 26px rgba(44,82,130,.06);display:flex;flex-direction:column;transition:transform .25s,box-shadow .25s,border-color .25s}
+.vaccine-card:hover{transform:translateY(-5px);border-color:var(--a);box-shadow:0 14px 32px rgba(44,82,130,.12)}
+.vaccine-thumb{position:relative;aspect-ratio:16/10;background:#0f111a;overflow:hidden}
+.vaccine-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.vaccine-code-pill{position:absolute;top:12px;left:12px;background:rgba(15,17,26,.82);color:#2ee59d;border:1px solid rgba(46,229,157,.35);backdrop-filter:blur(6px);padding:4px 10px;border-radius:99px;font-size:.75rem;font-weight:700;letter-spacing:.5px}
+.vaccine-dose-pill{position:absolute;top:12px;right:12px;background:rgba(15,17,26,.82);color:#e2e8f0;border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(6px);padding:4px 10px;border-radius:99px;font-size:.75rem;font-weight:600}
+.vaccine-body{padding:18px 20px 20px;display:flex;flex-direction:column;gap:10px;flex:1}
+.vaccine-body h3{margin:0;font-size:1.12rem;color:var(--text)}
+.vaccine-target{font-size:.86rem;font-weight:600;color:var(--a);margin:0}
+.vaccine-facts{display:grid;gap:8px;font-size:.87rem;line-height:1.5;color:var(--text);margin-top:2px}
+.vaccine-fact{background:#f9f7f2;border:1px solid var(--line);border-radius:10px;padding:8px 11px}
+.vaccine-fact strong{color:var(--a);font-size:.78rem;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:2px}
+.vaccine-foot{margin-top:auto;padding-top:10px;border-top:1px dashed var(--line);display:flex;justify-content:space-between;align-items:center;font-size:.8rem;color:var(--muted)}
 /* scroll-reveal animation (toggled by app.js) */
 .reveal{opacity:0;transform:translateY(24px);transition:opacity .7s ease,transform .7s ease}
 .reveal.in{opacity:1;transform:none}

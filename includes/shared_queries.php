@@ -392,6 +392,23 @@ function shared_mark_notification_read(int $notificationId, int $userId): bool
 // =====================================================================
 
 /**
+ * Touches: vaccines
+ * Fetch all active vaccines in the national immunization catalog for the Parent Vaccine Guide.
+ * 
+ * @return array
+ */
+function shared_get_all_active_vaccines(): array
+{
+    // Touches: vaccines
+    $sql = "SELECT vaccine_id, vaccine_name, short_code, disease_prevented,
+                   description, route, total_doses, side_effects
+            FROM vaccines
+            WHERE is_active = 1
+            ORDER BY vaccine_id ASC";
+    return db()->query($sql)->fetchAll();
+}
+
+/**
  * Touches: hospitals
  * Fetch active hospitals matching keyword search across name, city, address, or area.
  * 

@@ -1,7 +1,7 @@
 # VaxCare: Build Progress Tracker
 
 > One place to see what has been built, where it lives, what is verified, and what is still open.
-> Last updated: 18-Nov-2026 (after Days 3–4 viva features & landing SVG icons).
+> Last updated: 18-Nov-2026 (Theme depth polish + 8-vaccine Parent Guide with local illustrations).
 
 ---
 
@@ -38,7 +38,8 @@
 | UX #6 | Active nav highlight, success toast auto-fade, Complete confirm dialog, empty hints | `1074203` | Done |
 | Days 1–2 | `:focus-visible`, ARIA attrs, `:active`/`:disabled` buttons, mobile `flex-wrap`, 2D `#bg-canvas` | `42ea118` | Done |
 | Theme + Assets | Oat White (`#f7f5f0`) & Slate Blue (`#2c5282`) re-theme + onyx/indigo/mint hero & crest images | `180f49d`, `69c95fd` | Done |
-| Days 3–4 | Slate Blue SVG icons on `index.php`, Hospital "Today" KPI strip, `appointment_status_history` trail on `bookings.php` | *latest* | Done |
+| Days 3–4 | Slate Blue SVG icons on `index.php`, Hospital "Today" KPI strip, `appointment_status_history` trail on `bookings.php` | `0ce3c17` | Done |
+| Theme Depth + Vaccine Guide | Mint/indigo card accents, dark slate footer, `shared_get_all_active_vaccines()`, `includes/vaccine_guide.php` with 7 generated vaccine illustrations (+ SVG fallback for MR) | *latest* | Done |
 
 ---
 
