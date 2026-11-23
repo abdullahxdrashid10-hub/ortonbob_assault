@@ -1323,3 +1323,399 @@ function shared_update_hospital_profile(
     ]);
     return true;
 }
+
+
+// =====================================================================
+// SECTION 5: ADMIN MODULE (VIEWS, APPROVALS, HOSPITALS, VACCINES, REPORTS)
+// =====================================================================
+
+/**
+ * Touches: children, appointments, hospitals, vaccination_records, vaccines
+ * Fetch summary KPI metrics for the Admin Dashboard.
+ * 
+ * @return array<string, int>
+ */
+function shared_admin_get_dashboard_counts(): array
+{
+    // Touches: children, appointments, hospitals, vaccination_records, vaccines
+    $pdo = db();
+    return [
+        'active_children'    => (int)$pdo->query("SELECT COUNT(*) FROM children WHERE is_active = 1")->fetchColumn(),
+        'pending_bookings'   => (int)$pdo->query("SELECT COUNT(*) FROM appointments WHERE status = 'pending'")->fetchColumn(),
+        'active_hospitals'   => (int)$pdo->query("SELECT COUNT(*) FROM hospitals WHERE status = 'active'")->fetchColumn(),
+        'inactive_hospitals' => (int)$pdo->query("SELECT COUNT(*) FROM hospitals WHERE status = 'inactive'")->fetchColumn(),
+        'completed_records'  => (int)$pdo->query("SELECT COUNT(*) FROM vaccination_records")->fetchColumn(),
+        'active_vaccines'    => (int)$pdo->query("SELECT COUNT(*) FROM vaccines WHERE is_active = 1")->fetchColumn(),
+    ];
+}
+
+/**
+ * Touches: v_all_children
+ * Fetch all active children with parent details, optionally filtered by keyword.
+ * 
+ * @param string $search
+ * @return array
+ */
+function shared_admin_get_all_children(string $search = ''): array
+{
+    // Touches: v_all_children
+    $sql = "SELECT * FROM v_all_children";
+    $params = [];
+    if ($search !== '') {
+        $sql .= " WHERE child_name LIKE :kw OR parent_name LIKE :kw OR city LIKE :kw OR parent_phone LIKE :kw";
+        $params[':kw'] = '%' . $search . '%';
+    }
+    $sql .= " ORDER BY child_id DESC";
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Touches: v_upcoming_vaccinations
+ * Fetch upcoming/missed vaccination dates across all children.
+ * 
+ * @param string $filter ('due_30' | 'overdue' | 'all')
+ * @return array
+ */
+function shared_admin_get_upcoming_vaccinations(string $filter = 'due_30'): array
+{
+    // Touches: v_upcoming_vaccinations
+    $sql = "SELECT * FROM v_upcoming_vaccinations";
+    if ($filter === 'overdue') {
+        $sql .= " WHERE status = 'missed' OR days_remaining < 0";
+    } elseif ($filter === 'due_30') {
+        $sql .= " WHERE days_remaining <= 30";
+    }
+    $sql .= " ORDER BY due_date ASC, child_name ASC LIMIT 150";
+
+    return db()->query($sql)->fetchAll();
+}
+
+/**
+ * Touches: v_booking_details
+ * Fetch all appointment booking details filtered by status ('pending', 'approved', 'rejected', 'completed', 'cancelled', 'all').
+ * 
+ * @param string $statusFilter
+ * @return array
+ */
+function shared_admin_get_bookings(string $statusFilter = 'pending'): array
+{
+    // Touches: v_booking_details
+    $sql = "SELECT * FROM v_booking_details";
+    $params = [];
+    if ($statusFilter !== 'all') {
+        $sql .= " WHERE status = ?";
+        $params[] = $statusFilter;
+    }
+    $sql .= " ORDER BY requested_at DESC, appointment_id DESC";
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Touches: appointments, child_vaccinations, appointment_status_history, notifications
+ * Calls official stored procedure sp_review_appointment(appointment_id, admin_id, decision, remarks).
+ * 
+ * @param int $appointmentId
+ * @param int $adminId
+ * @param string $decision ('approved' | 'rejected')
+ * @param string|null $remarks
+ * @return array{success:bool, message:string}
+ */
+function shared_admin_review_appointment(
+    int $appointmentId,
+    int $adminId,
+    string $decision,
+    ?string $remarks = null
+): array {
+    // Touches: appointments, child_vaccinations, appointment_status_history, notifications
+    try {
+        $stmt = db()->prepare("CALL sp_review_appointment(?, ?, ?, ?)");
+        $stmt->execute([$appointmentId, $adminId, $decision, $remarks ?: null]);
+        $label = $decision === 'approved' ? 'approved' : 'rejected';
+        return [
+            'success' => true,
+            'message' => "Appointment #$appointmentId has been $label."
+        ];
+    } catch (PDOException $e) {
+        error_log('sp_review_appointment error: ' . $e->getMessage());
+        return [
+            'success' => false,
+            'message' => shared_extract_sp_error($e, 'Could not review appointment. Verify it is still pending.')
+        ];
+    }
+}
+
+/**
+ * Touches: hospitals, users
+ * Fetch all hospitals (active and inactive) for admin management.
+ * 
+ * @param string $search
+ * @return array
+ */
+function shared_admin_get_all_hospitals(string $search = ''): array
+{
+    // Touches: hospitals, users
+    $sql = "SELECT h.*, u.status AS user_status
+            FROM hospitals h
+            LEFT JOIN users u ON u.user_id = h.user_id";
+    $params = [];
+    if ($search !== '') {
+        $sql .= " WHERE h.hospital_name LIKE :kw OR h.city LIKE :kw OR h.area LIKE :kw OR h.email LIKE :kw";
+        $params[':kw'] = '%' . $search . '%';
+    }
+    $sql .= " ORDER BY h.status DESC, h.hospital_id DESC";
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Touches: users, hospitals
+ * Admin creates a new hospital facility + login account (immediately active, added_by = admin_id).
+ * 
+ * @return int Inserted hospital_id
+ */
+function shared_admin_add_hospital(
+    int $adminId,
+    string $name,
+    string $email,
+    string $passwordHash,
+    string $address,
+    string $city,
+    ?string $area,
+    ?string $phone,
+    ?string $regNo,
+    string $openingTime,
+    string $closingTime,
+    int $dailyCapacity,
+    string $status = 'active'
+): int {
+    // Touches: users, hospitals
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $stmtUser = $pdo->prepare("INSERT INTO users (email, password_hash, role, status) VALUES (?, ?, 'hospital', ?)");
+        $stmtUser->execute([$email, $passwordHash, $status]);
+        $userId = (int)$pdo->lastInsertId();
+
+        $stmtHosp = $pdo->prepare("
+            INSERT INTO hospitals (
+                user_id, hospital_name, registration_no, address, city, area,
+                phone, email, opening_time, closing_time, daily_capacity, status, added_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmtHosp->execute([
+            $userId,
+            $name,
+            $regNo,
+            $address,
+            $city,
+            $area,
+            $phone,
+            $email,
+            $openingTime,
+            $closingTime,
+            $dailyCapacity,
+            $status,
+            $adminId
+        ]);
+        $hospitalId = (int)$pdo->lastInsertId();
+
+        $pdo->commit();
+        return $hospitalId;
+    } catch (PDOException $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        error_log('shared_admin_add_hospital error: ' . $e->getMessage());
+        throw $e;
+    }
+}
+
+/**
+ * Touches: hospitals, users
+ * Admin updates hospital details and syncs active/inactive status to both hospitals and users.
+ */
+function shared_admin_update_hospital(
+    int $hospitalId,
+    string $name,
+    string $address,
+    string $city,
+    ?string $area,
+    ?string $phone,
+    ?string $regNo,
+    string $openingTime,
+    string $closingTime,
+    int $dailyCapacity,
+    string $status
+): bool {
+    // Touches: hospitals, users
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare("
+            UPDATE hospitals
+            SET hospital_name = ?, registration_no = ?, address = ?, city = ?, area = ?,
+                phone = ?, opening_time = ?, closing_time = ?, daily_capacity = ?, status = ?
+            WHERE hospital_id = ?
+        ");
+        $stmt->execute([
+            $name,
+            $regNo,
+            $address,
+            $city,
+            $area,
+            $phone,
+            $openingTime,
+            $closingTime,
+            $dailyCapacity,
+            $status,
+            $hospitalId
+        ]);
+
+        // Sync linked user login status so newly activated hospitals can log in immediately
+        $upUser = $pdo->prepare("
+            UPDATE users u
+            JOIN hospitals h ON h.user_id = u.user_id
+            SET u.status = ?
+            WHERE h.hospital_id = ?
+        ");
+        $upUser->execute([$status, $hospitalId]);
+
+        $pdo->commit();
+        return true;
+    } catch (PDOException $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        error_log('shared_admin_update_hospital error: ' . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Touches: hospitals, users, appointments
+ * Safely deletes a hospital if it has no appointments; otherwise deactivates it to preserve history.
+ * 
+ * @return string ('deleted' | 'deactivated' | 'error')
+ */
+function shared_admin_delete_hospital(int $hospitalId): string
+{
+    // Touches: hospitals, users, appointments
+    $pdo = db();
+    $stmtCheck = $pdo->prepare("SELECT COUNT(*) FROM appointments WHERE hospital_id = ?");
+    $stmtCheck->execute([$hospitalId]);
+    $hasAppts = (int)$stmtCheck->fetchColumn() > 0;
+
+    $stmtUser = $pdo->prepare("SELECT user_id FROM hospitals WHERE hospital_id = ? LIMIT 1");
+    $stmtUser->execute([$hospitalId]);
+    $userId = $stmtUser->fetchColumn();
+
+    $pdo->beginTransaction();
+    try {
+        if ($hasAppts) {
+            $pdo->prepare("UPDATE hospitals SET status = 'inactive' WHERE hospital_id = ?")->execute([$hospitalId]);
+            if ($userId) {
+                $pdo->prepare("UPDATE users SET status = 'inactive' WHERE user_id = ?")->execute([(int)$userId]);
+            }
+            $pdo->commit();
+            return 'deactivated';
+        }
+
+        $pdo->prepare("DELETE FROM hospitals WHERE hospital_id = ?")->execute([$hospitalId]);
+        if ($userId) {
+            $pdo->prepare("DELETE FROM users WHERE user_id = ?")->execute([(int)$userId]);
+        }
+        $pdo->commit();
+        return 'deleted';
+    } catch (PDOException $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        error_log('shared_admin_delete_hospital error: ' . $e->getMessage());
+        return 'error';
+    }
+}
+
+/**
+ * Touches: vaccines, v_vaccine_availability
+ * Fetch all vaccines (active & inactive) with aggregated hospital availability counts.
+ * 
+ * @return array
+ */
+function shared_admin_get_vaccines_overview(): array
+{
+    // Touches: vaccines, v_vaccine_availability
+    $sql = "SELECT v.*,
+                   COALESCE(va.hospitals_available, 0) AS hospitals_available,
+                   COALESCE(va.total_quantity, 0) AS total_quantity,
+                   COALESCE(va.overall_status, 'Unavailable') AS overall_status
+            FROM vaccines v
+            LEFT JOIN v_vaccine_availability va ON va.vaccine_id = v.vaccine_id
+            ORDER BY v.vaccine_id ASC";
+    return db()->query($sql)->fetchAll();
+}
+
+/**
+ * Touches: vaccines
+ * Toggle a vaccine's active status (1 = Available in system, 0 = Unavailable).
+ */
+function shared_admin_toggle_vaccine_status(int $vaccineId, int $isActive): bool
+{
+    // Touches: vaccines
+    $stmt = db()->prepare("UPDATE vaccines SET is_active = ? WHERE vaccine_id = ?");
+    $stmt->execute([$isActive ? 1 : 0, $vaccineId]);
+    return $stmt->rowCount() > 0;
+}
+
+/**
+ * Touches: v_hospital_vaccine_status
+ * Fetch per-hospital vaccine stock status across all facilities.
+ * 
+ * @return array
+ */
+function shared_admin_get_hospital_vaccine_stock(): array
+{
+    // Touches: v_hospital_vaccine_status
+    return db()->query("SELECT * FROM v_hospital_vaccine_status ORDER BY hospital_name ASC, vaccine_name ASC")->fetchAll();
+}
+
+/**
+ * Touches: v_vaccination_report
+ * Fetch child-wise and date-wise vaccination report rows for Admin.
+ * 
+ * @param string|null $fromDate (YYYY-MM-DD)
+ * @param string|null $toDate (YYYY-MM-DD)
+ * @param int $childId
+ * @return array
+ */
+function shared_admin_get_vaccination_report(?string $fromDate = null, ?string $toDate = null, int $childId = 0): array
+{
+    // Touches: v_vaccination_report
+    $sql = "SELECT * FROM v_vaccination_report WHERE 1=1";
+    $params = [];
+
+    if ($childId > 0) {
+        $sql .= " AND child_id = ?";
+        $params[] = $childId;
+    }
+    if (!empty($fromDate)) {
+        $sql .= " AND vaccination_date >= ?";
+        $params[] = $fromDate;
+    }
+    if (!empty($toDate)) {
+        $sql .= " AND vaccination_date <= ?";
+        $params[] = $toDate;
+    }
+
+    $sql .= " ORDER BY vaccination_date DESC, vaccination_time DESC, record_id DESC";
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}

@@ -72,20 +72,21 @@ B. HOSPITAL MODULE (OUR SCOPE)
          Stock, Logout per Step 3B spec.
 
 
-C. ADMIN MODULE (TEAMMATES' SCOPE - NOT IN OUR CODEBASE)
---------------------------------------------------------
-[TEAM] All child details
-[TEAM] Date & time of vaccination (upcoming dates of all children)
-[TEAM] Report of vaccination (child & date-wise)
-[TEAM] List of vaccines (available / unavailable)
-[TEAM] Request from parents (Approve / Reject via sp_review_appointment)
-[TEAM] Add / Update / Delete Hospital + Activate new hospitals
-[TEAM] List of hospitals & Booking details
-       * NOTE: Database views & procedures for Admin already exist in
-         sql/official_schema.sql (v_all_children, v_booking_details,
-         v_upcoming_vaccinations, v_vaccination_report, sp_review_appointment).
-         Confirm with teammates to merge Admin + Parent + Hospital before final
-         submission!
+C. ADMIN MODULE (BUILT IN /admin)
+---------------------------------
+[DONE] Admin Login / Logout & Dashboard
+       - admin/login.php, admin/logout.php, admin/dashboard.php
+       - auth_login_admin() + require_admin() in includes/auth.php
+[DONE] All child details & upcoming vaccination dates
+       - admin/children.php (uses v_all_children & v_upcoming_vaccinations)
+[DONE] Request from parents (Approve / Reject) & Booking Details
+       - admin/bookings.php (uses v_booking_details & sp_review_appointment)
+[DONE] Add / Update / Delete Hospital + Activate new hospitals
+       - admin/hospitals.php (transaction into users + hospitals, syncs status)
+[DONE] List of vaccines (available / unavailable) & hospital stock matrix
+       - admin/vaccines.php (vaccines.is_active toggle + v_hospital_vaccine_status)
+[DONE] Report of vaccination (child & date-wise)
+       - admin/reports.php (v_vaccination_report + child/date filters + print)
 
 
 --------------------------------------------------------------------------------

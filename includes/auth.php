@@ -122,6 +122,51 @@ function auth_login_hospital(string $email, string $password, ?string &$errorMsg
 }
 
 /**
+ * Attempt administrator authentication.
+ * Verifies email, active status, admin role, and password hash.
+ * On success, initializes session keys (user_id, role='admin', admin_id, admin_name)
+ * and updates users.last_login_at.
+ * 
+ * @param string $email
+ * @param string $password
+ * @return bool True if authenticated successfully, false otherwise.
+ */
+function auth_login_admin(string $email, string $password): bool
+{
+    $email = strtolower(trim($email));
+    $pdo = db();
+
+    $sql = "SELECT u.user_id, u.email, u.password_hash, u.role, u.status,
+                   a.admin_id, a.full_name
+            FROM users u
+            JOIN admins a ON a.user_id = u.user_id
+            WHERE u.email = :email AND u.role = 'admin' AND u.status = 'active'
+            LIMIT 1";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([':email' => $email]);
+    $user = $stmt->fetch();
+
+    if ($user && password_verify($password, $user['password_hash'])) {
+        if (!headers_sent()) {
+            session_regenerate_id(true);
+        }
+
+        $_SESSION['user_id']    = (int)$user['user_id'];
+        $_SESSION['role']       = 'admin';
+        $_SESSION['admin_id']   = (int)$user['admin_id'];
+        $_SESSION['admin_name'] = $user['full_name'];
+
+        $up = $pdo->prepare("UPDATE users SET last_login_at = NOW() WHERE user_id = ?");
+        $up->execute([$user['user_id']]);
+
+        return true;
+    }
+
+    return false;
+}
+
+/**
  * Check if the active session is an authenticated parent.
  * 
  * @return bool
@@ -146,6 +191,18 @@ function auth_is_hospital_logged_in(): bool
 }
 
 /**
+ * Check if the active session is an authenticated administrator.
+ * 
+ * @return bool
+ */
+function auth_is_admin_logged_in(): bool
+{
+    return !empty($_SESSION['user_id'])
+        && !empty($_SESSION['admin_id'])
+        && (($_SESSION['role'] ?? '') === 'admin');
+}
+
+/**
  * Access control guard: requires a logged-in parent session.
  * Redirects unauthorized requests to the parent login page.
  */
@@ -164,6 +221,17 @@ function require_hospital(): void
 {
     if (!auth_is_hospital_logged_in()) {
         redirect('hospital/login.php');
+    }
+}
+
+/**
+ * Access control guard: requires a logged-in administrator session.
+ * Redirects unauthorized requests to the admin login page.
+ */
+function require_admin(): void
+{
+    if (!auth_is_admin_logged_in()) {
+        redirect('admin/login.php');
     }
 }
 

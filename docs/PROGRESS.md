@@ -12,7 +12,7 @@
 | Project | Vaccination Management System ("VaxCare"), Aptech eProject |
 | Stack | Plain PHP 8, MariaDB (XAMPP), PDO prepared statements, sessions. No PHP framework; local Three.js r128 for 3D backdrop |
 | Database | `vaccination_db`, from `sql/official_schema.sql` (team dump, authoritative, never modified by us except one typo fix, see §7) |
-| Our scope | **Parent panel** and **Hospital panel**. Admin panel belongs to teammates |
+| Our scope | **Parent panel** (`/parent`), **Hospital panel** (`/hospital`), and **Admin panel** (`/admin`) |
 | Repo | `github.com/abdullahxdrashid10-hub/ortonbob_assault` (branch `main`) |
 | Delivery | Push to `main` + fresh `E project.zip` after every change |
 
@@ -41,7 +41,8 @@
 | Days 3–4 | Slate Blue SVG icons on `index.php`, Hospital "Today" KPI strip, `appointment_status_history` trail on `bookings.php` | `0ce3c17` | Done |
 | Theme Depth + Vaccine Guide | Mint/indigo card accents, `shared_get_all_active_vaccines()`, `includes/vaccine_guide.php` with 7 generated vaccine illustrations (+ SVG fallback for MR) | `6732090` | Done |
 | Onyx/Indigo/Mint UI | Unified Onyx Black (`#0f111a`), Electric Indigo (`#6366f1`) & Tropical Mint (`#2ee59d`) theme across all pages + structured hospital cards | `cc8fc04` | Done |
-| 3D WebGL Backdrop | Local Three.js r128 (`three.min.js` + `bg-3d.js`) rendering 3D DNA double-helix, wireframe immunity cells & 3D particle field | *latest* | Done |
+| 3D WebGL Backdrop | Local Three.js r128 (`three.min.js` + `bg-3d.js`) rendering 3D DNA double-helix, wireframe immunity cells & 3D particle field | `5166c9c` | Done |
+| Admin Panel | Full `/admin` panel: `login`, `logout`, `dashboard`, `bookings` (`sp_review_appointment`), `children`, `hospitals` CRUD/activation, `vaccines`, `reports` | *latest* | Done |
 
 ---
 
@@ -178,6 +179,7 @@ E project/
 │   ├── header.php, footer.php layout + nav
 ├── parent/                    11 pages (see §3)
 ├── hospital/                  register, login, logout, appointments, stock, profile, inventory (redirect)
+├── admin/                     login, logout, dashboard, bookings, children, hospitals, vaccines, reports
 ├── assets/
 │   ├── css/style.css          Oat White & Slate Blue theme
 │   ├── js/app.js              menu, scroll reveal, count-up, toast

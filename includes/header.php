@@ -49,9 +49,22 @@ $currentPage = basename($_SERVER['PHP_SELF'] ?? '');
       <?= csrf_field() ?>
       <button type="submit" class="btn btn-sm">Logout</button>
     </form>
+  <?php elseif ($role === 'admin' && !empty($_SESSION['admin_id'])): ?>
+    <a class="<?= $currentPage === 'dashboard.php' ? 'active' : '' ?>" href="<?= $B ?>/admin/dashboard.php">Dashboard</a>
+    <a class="<?= $currentPage === 'bookings.php' ? 'active' : '' ?>" href="<?= $B ?>/admin/bookings.php">Bookings</a>
+    <a class="<?= $currentPage === 'children.php' ? 'active' : '' ?>" href="<?= $B ?>/admin/children.php">Children</a>
+    <a class="<?= $currentPage === 'hospitals.php' ? 'active' : '' ?>" href="<?= $B ?>/admin/hospitals.php">Hospitals</a>
+    <a class="<?= $currentPage === 'vaccines.php' ? 'active' : '' ?>" href="<?= $B ?>/admin/vaccines.php">Vaccines</a>
+    <a class="<?= $currentPage === 'reports.php' ? 'active' : '' ?>" href="<?= $B ?>/admin/reports.php">Reports</a>
+    <span class="who" style="color:var(--mint); font-weight:600; padding:0 6px;"><?= e($_SESSION['admin_name'] ?? 'Admin') ?></span>
+    <form method="post" action="<?= $B ?>/admin/logout.php" style="display:inline; margin:0;">
+      <?= csrf_field() ?>
+      <button type="submit" class="btn btn-sm">Logout</button>
+    </form>
   <?php else: ?>
     <a class="<?= $currentPage === 'login.php' && str_contains($_SERVER['PHP_SELF'] ?? '', '/parent/') ? 'active' : '' ?>" href="<?= $B ?>/parent/login.php">Parent Login</a>
     <a class="<?= $currentPage === 'login.php' && str_contains($_SERVER['PHP_SELF'] ?? '', '/hospital/') ? 'active' : '' ?>" href="<?= $B ?>/hospital/login.php">Hospital Login</a>
+    <a class="<?= $currentPage === 'login.php' && str_contains($_SERVER['PHP_SELF'] ?? '', '/admin/') ? 'active' : '' ?>" href="<?= $B ?>/admin/login.php">Admin Login</a>
     <a class="btn btn-sm" href="<?= $B ?>/parent/register.php">Get Started</a>
   <?php endif; ?>
   </nav>
