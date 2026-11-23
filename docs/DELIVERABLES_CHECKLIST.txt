@@ -136,8 +136,9 @@ the Synopsis and Source Code:
   5   Project Plan                          [PARTIAL] Milestones tracked in
                                                       docs/PROGRESS.md; format as
                                                       Gantt / phase table
-  6   E-R Diagrams                          [LEFT]    Draw ER diagram covering all
-                                                      14 tables in vaccination_db
+  6   E-R Diagrams                          [DONE]    14-table Mermaid ER diagram +
+                                                      27-constraint FK matrix in
+                                                      docs/ER_DIAGRAM.md
   7   Algorithms                            [LEFT]    Write step-by-step algos /
                                                       pseudocode (schedule gen,
                                                       30-day check, booking,
